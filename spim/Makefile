@@ -64,13 +64,13 @@ DOC_DIR = ../Documentation
 
 
 # Full path for the parent directory of all installed files:
-PREFIX = /usr
+PREFIX = .
 
 # Full path for the directory that will hold the executable files:
 BIN_DIR = $(PREFIX)/bin
 
 # Full path for the directory that will hold the exception handler:
-EXCEPTION_DIR = $(PREFIX)/share/spim
+EXCEPTION_DIR = $(PREFIX)/res/exception
 
 # Full path for the directory that will hold the man files:
 MAN_DIR = $(PREFIX)/share/man/man1
@@ -113,60 +113,12 @@ CSH = bash
 
 LEXCFLAGS += -O $(CXXFLAGS)
 
-
-
 OBJS = spim.o spim-utils.o run.o mem.o inst.o data.o sym-tbl.o parser_yacc.o lex.yy.o \
        syscall.o display-utils.o string-stream.o
 
-
-spim:   $(OBJS)
+spim: $(OBJS)
 	$(CXX) -g $(OBJS) $(LDFLAGS) -o $@
 
-
-#
-
-#
-# Test spim with a torture test:
-#
-
-test:	spim
-	@echo
-	@echo "Testing tt.bare.s:"
-	$(CSH) -c "./spim -delayed_branches -delayed_loads -noexception -file $(TEST_DIR)/tt.bare.s >& test.out"
-	@tail -2 test.out
-	@echo
-
-	@echo
-	@echo "Testing tt.core.s:"
-	$(CSH) -c "./spim -ef $(CPU_DIR)/exceptions.s -file $(TEST_DIR)/tt.core.s < $(TEST_DIR)/tt.in >& test.out"
-	@tail -2 test.out
-	@echo
-
-	@echo
-	@echo "Testing tt.le.s:"
-	$(CSH) -c "./spim -ef $(CPU_DIR)/exceptions.s -file $(TEST_DIR)/tt.le.s  >& test.out"
-	@tail -2 test.out
-	@echo
-	@echo
-
-# This test currently only works for little-endian machines.  The file
-# tt.alu.bare.s needs to be converted in places for big-endian machines.
-
-test_bare: spim
-	@echo
-	@echo "Testing tt.alu.bare.s:"
-	$(CSH) -c "./spim -bare -noexception -file $(TEST_DIR)/tt.alu.bare.s >& test.out"
-	@tail -2 test.out
-	@echo
-
-	@echo
-	@echo "Testing tt.fpt.bare.s:"
-	$(CSH) -c "./spim -bare -noexception -file $(TEST_DIR)/tt.fpu.bare.s >& test.out"
-	@tail -2 test.out
-	@echo
-	@echo
-
-#
 
 TAGS:	*.cpp *.h *.l *.y
 	etags *.l *.y *.cpp *.h
@@ -195,7 +147,6 @@ splint: spim
 # Dependences not handled well by makedepend:
 #
 
-
 parser_yacc.h: parser_yacc.cpp
 
 parser_yacc.cpp: $(CPU_DIR)/parser.y
@@ -211,116 +162,27 @@ lex.yy.cpp: $(CPU_DIR)/scanner.l
 lex.yy.o: lex.yy.cpp
 	$(CXX) $(LEXCFLAGS) -c lex.yy.cpp
 
+data.o: $(CPU_DIR)/spim.h $(CPU_DIR)/string-stream.h $(CPU_DIR)/spim-utils.h $(CPU_DIR)/inst.h $(CPU_DIR)/reg.h $(CPU_DIR)/mem.h $(CPU_DIR)/sym-tbl.h $(CPU_DIR)/parser.h $(CPU_DIR)/run.h $(CPU_DIR)/data.h
 
-#
-# DO NOT DELETE THIS LINE -- make depend depends on it.
+display-utils.o: $(CPU_DIR)/spim.h $(CPU_DIR)/string-stream.h $(CPU_DIR)/spim-utils.h $(CPU_DIR)/inst.h $(CPU_DIR)/data.h $(CPU_DIR)/reg.h $(CPU_DIR)/mem.h $(CPU_DIR)/run.h $(CPU_DIR)/sym-tbl.h
 
-data.o: $(CPU_DIR)/spim.h
-data.o: $(CPU_DIR)/string-stream.h
-data.o: $(CPU_DIR)/spim-utils.h
-data.o: $(CPU_DIR)/inst.h
-data.o: $(CPU_DIR)/reg.h
-data.o: $(CPU_DIR)/mem.h
-data.o: $(CPU_DIR)/sym-tbl.h
-data.o: $(CPU_DIR)/parser.h
-data.o: $(CPU_DIR)/run.h
-data.o: $(CPU_DIR)/data.h
-display-utils.o: $(CPU_DIR)/spim.h
-display-utils.o: $(CPU_DIR)/string-stream.h
-display-utils.o: $(CPU_DIR)/spim-utils.h
-display-utils.o: $(CPU_DIR)/inst.h
-display-utils.o: $(CPU_DIR)/data.h
-display-utils.o: $(CPU_DIR)/reg.h
-display-utils.o: $(CPU_DIR)/mem.h
-display-utils.o: $(CPU_DIR)/run.h
-display-utils.o: $(CPU_DIR)/sym-tbl.h
 dump_ops.o: $(CPU_DIR)/op.h
-inst.o: $(CPU_DIR)/spim.h
-inst.o: $(CPU_DIR)/string-stream.h
-inst.o: $(CPU_DIR)/spim-utils.h
-inst.o: $(CPU_DIR)/inst.h
-inst.o: $(CPU_DIR)/reg.h
-inst.o: $(CPU_DIR)/mem.h
-inst.o: $(CPU_DIR)/sym-tbl.h
-inst.o: $(CPU_DIR)/parser.h
-inst.o: $(CPU_DIR)/scanner.h
-inst.o: parser_yacc.h
-inst.o: $(CPU_DIR)/data.h
-inst.o: $(CPU_DIR)/op.h
-mem.o: $(CPU_DIR)/spim.h
-mem.o: $(CPU_DIR)/string-stream.h
-mem.o: $(CPU_DIR)/spim-utils.h
-mem.o: $(CPU_DIR)/inst.h
-mem.o: $(CPU_DIR)/reg.h
-mem.o: $(CPU_DIR)/mem.h
-run.o: $(CPU_DIR)/spim.h
-run.o: $(CPU_DIR)/string-stream.h
-run.o: $(CPU_DIR)/spim-utils.h
-run.o: $(CPU_DIR)/inst.h
-run.o: $(CPU_DIR)/reg.h
-run.o: $(CPU_DIR)/mem.h
-run.o: $(CPU_DIR)/sym-tbl.h
-run.o: parser_yacc.h
-run.o: $(CPU_DIR)/syscall.h
-run.o: $(CPU_DIR)/run.h
-spim-utils.o: $(CPU_DIR)/spim.h
-spim-utils.o: $(CPU_DIR)/string-stream.h
-spim-utils.o: $(CPU_DIR)/spim-utils.h
-spim-utils.o: $(CPU_DIR)/inst.h
-spim-utils.o: $(CPU_DIR)/data.h
-spim-utils.o: $(CPU_DIR)/reg.h
-spim-utils.o: $(CPU_DIR)/mem.h
-spim-utils.o: $(CPU_DIR)/scanner.h
-spim-utils.o: $(CPU_DIR)/parser.h
-spim-utils.o: parser_yacc.h
-spim-utils.o: $(CPU_DIR)/run.h
-spim-utils.o: $(CPU_DIR)/sym-tbl.h
-string-stream.o: $(CPU_DIR)/spim.h
-string-stream.o: $(CPU_DIR)/string-stream.h
-sym-tbl.o: $(CPU_DIR)/spim.h
-sym-tbl.o: $(CPU_DIR)/string-stream.h
-sym-tbl.o: $(CPU_DIR)/spim-utils.h
-sym-tbl.o: $(CPU_DIR)/inst.h
-sym-tbl.o: $(CPU_DIR)/reg.h
-sym-tbl.o: $(CPU_DIR)/mem.h
-sym-tbl.o: $(CPU_DIR)/data.h
-sym-tbl.o: $(CPU_DIR)/parser.h
-sym-tbl.o: $(CPU_DIR)/sym-tbl.h
-sym-tbl.o: parser_yacc.h
-syscall.o: $(CPU_DIR)/spim.h
-syscall.o: $(CPU_DIR)/string-stream.h
-syscall.o: $(CPU_DIR)/inst.h
-syscall.o: $(CPU_DIR)/reg.h
-syscall.o: $(CPU_DIR)/mem.h
-syscall.o: $(CPU_DIR)/sym-tbl.h
-syscall.o: $(CPU_DIR)/syscall.h
-lex.yy.o: $(CPU_DIR)/spim.h
-lex.yy.o: $(CPU_DIR)/string-stream.h
-lex.yy.o: $(CPU_DIR)/spim-utils.h
-lex.yy.o: $(CPU_DIR)/inst.h
-lex.yy.o: $(CPU_DIR)/reg.h
-lex.yy.o: $(CPU_DIR)/sym-tbl.h
-lex.yy.o: $(CPU_DIR)/parser.h
-lex.yy.o: $(CPU_DIR)/scanner.h
-lex.yy.o: parser_yacc.h
-lex.yy.o: $(CPU_DIR)/op.h
-spim.o: $(CPU_DIR)/spim.h
-spim.o: $(CPU_DIR)/string-stream.h
-spim.o: $(CPU_DIR)/spim-utils.h
-spim.o: $(CPU_DIR)/inst.h
-spim.o: $(CPU_DIR)/reg.h
-spim.o: $(CPU_DIR)/mem.h
-spim.o: $(CPU_DIR)/parser.h
-spim.o: $(CPU_DIR)/sym-tbl.h
-spim.o: $(CPU_DIR)/scanner.h
-spim.o: parser_yacc.h
-parser_yacc.o: $(CPU_DIR)/spim.h
-parser_yacc.o: $(CPU_DIR)/string-stream.h
-parser_yacc.o: $(CPU_DIR)/spim-utils.h
-parser_yacc.o: $(CPU_DIR)/inst.h
-parser_yacc.o: $(CPU_DIR)/reg.h
-parser_yacc.o: $(CPU_DIR)/mem.h
-parser_yacc.o: $(CPU_DIR)/sym-tbl.h
-parser_yacc.o: $(CPU_DIR)/data.h
-parser_yacc.o: $(CPU_DIR)/scanner.h
-parser_yacc.o: $(CPU_DIR)/parser.h
+
+inst.o: $(CPU_DIR)/spim.h $(CPU_DIR)/string-stream.h $(CPU_DIR)/spim-utils.h $(CPU_DIR)/inst.h $(CPU_DIR)/reg.h $(CPU_DIR)/mem.h $(CPU_DIR)/sym-tbl.h $(CPU_DIR)/parser.h $(CPU_DIR)/scanner.h parser_yacc.h $(CPU_DIR)/data.h $(CPU_DIR)/op.h
+
+mem.o: $(CPU_DIR)/spim.h $(CPU_DIR)/string-stream.h $(CPU_DIR)/spim-utils.h $(CPU_DIR)/inst.h $(CPU_DIR)/reg.h $(CPU_DIR)/mem.h
+
+run.o: $(CPU_DIR)/spim.h $(CPU_DIR)/string-stream.h $(CPU_DIR)/spim-utils.h $(CPU_DIR)/inst.h $(CPU_DIR)/reg.h $(CPU_DIR)/mem.h $(CPU_DIR)/sym-tbl.h parser_yacc.h $(CPU_DIR)/syscall.h $(CPU_DIR)/run.h
+
+spim-utils.o: $(CPU_DIR)/spim.h $(CPU_DIR)/string-stream.h $(CPU_DIR)/spim-utils.h $(CPU_DIR)/inst.h $(CPU_DIR)/data.h $(CPU_DIR)/reg.h $(CPU_DIR)/mem.h $(CPU_DIR)/scanner.h $(CPU_DIR)/parser.h parser_yacc.h $(CPU_DIR)/run.h $(CPU_DIR)/sym-tbl.h
+
+string-stream.o: $(CPU_DIR)/spim.h $(CPU_DIR)/string-stream.h
+sym-tbl.o: $(CPU_DIR)/spim.h $(CPU_DIR)/string-stream.h $(CPU_DIR)/spim-utils.h $(CPU_DIR)/inst.h $(CPU_DIR)/reg.h $(CPU_DIR)/mem.h $(CPU_DIR)/data.h $(CPU_DIR)/parser.h $(CPU_DIR)/sym-tbl.h parser_yacc.h
+
+syscall.o: $(CPU_DIR)/spim.h $(CPU_DIR)/string-stream.h $(CPU_DIR)/inst.h $(CPU_DIR)/reg.h $(CPU_DIR)/mem.h $(CPU_DIR)/sym-tbl.h $(CPU_DIR)/syscall.h
+
+lex.yy.o: $(CPU_DIR)/spim.h $(CPU_DIR)/string-stream.h $(CPU_DIR)/spim-utils.h $(CPU_DIR)/inst.h $(CPU_DIR)/reg.h $(CPU_DIR)/sym-tbl.h $(CPU_DIR)/parser.h $(CPU_DIR)/scanner.h parser_yacc.h $(CPU_DIR)/op.h
+
+spim.o: $(CPU_DIR)/spim.h $(CPU_DIR)/string-stream.h $(CPU_DIR)/spim-utils.h $(CPU_DIR)/inst.h $(CPU_DIR)/reg.h $(CPU_DIR)/mem.h $(CPU_DIR)/parser.h $(CPU_DIR)/sym-tbl.h $(CPU_DIR)/scanner.h parser_yacc.h
+
+parser_yacc.o: $(CPU_DIR)/spim.h $(CPU_DIR)/string-stream.h $(CPU_DIR)/spim-utils.h $(CPU_DIR)/inst.h $(CPU_DIR)/reg.h $(CPU_DIR)/mem.h $(CPU_DIR)/sym-tbl.h $(CPU_DIR)/data.h $(CPU_DIR)/scanner.h $(CPU_DIR)/parser.h

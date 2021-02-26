@@ -135,8 +135,6 @@ static char** program_argv;
 static bool dump_user_segments = false;
 static bool dump_all_segments = false;
 
-
-
 int
 main (int argc, char **argv)
 {

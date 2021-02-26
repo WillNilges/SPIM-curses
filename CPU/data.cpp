@@ -60,8 +60,6 @@ static mem_addr next_gp_item_addr; /* Address of next item accessed off $gp */
 
 static bool auto_alignment = true; /* => align literal to natural bound*/
 
-
-
 /* If TO_KERNEL is true, subsequent data will be placed in the
    kernel data segment.  If false, data will go to the user's data
    segment.*/
