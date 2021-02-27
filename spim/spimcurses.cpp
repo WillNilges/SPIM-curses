@@ -389,7 +389,11 @@ static void curses_loop() {
     WINDOW* reg_win = create_newwin(28, 102, 1, 1);
 
     int instruction_height = 28;
-    WINDOW* inst_win = create_newwin(instruction_height, 105, 1, 107);
+    int inst_win_y = 1;
+    WINDOW* inst_win = create_newwin(instruction_height, 105, inst_win_y, 107);
+
+    int inst_cursor_position = 0;
+    int bottom_inst = 0;
   
     // Main loop
     char ch;
@@ -402,8 +406,6 @@ static void curses_loop() {
         // A hideous implementation of the "step" code
         steps = (redo ? steps : get_opt_int ());
         addr = PC == 0 ? starting_address () : PC;
-
-        int bottom_inst = 0;
 
         if (steps == 0)
             steps = 1;
@@ -427,16 +429,29 @@ static void curses_loop() {
             mvwprintw(reg_win, 0,1, "Registers");
             wattroff(reg_win, A_BOLD);
 
+            if (inst_cursor_position + 5 > instruction_height)
+            {
+                bottom_inst += 5;
+                werase(inst_win);
+            } else if  (inst_cursor_position < 0)
+            {
+                bottom_inst -= 5;
+                werase(inst_win);
+            }
+
             // Dump instruction list to the screen
             std::string current_inst = inst_to_string (addr);
-            mvprintw(0, 108, inst_to_string (addr));
+            mvprintw(0, 108, inst_to_string (addr)); // Print current inst at the top
             for (int i = bottom_inst; i < bottom_inst + instruction_height - 1; i++)
             {
-                if (inst_dump.size() > i)
+                if (i < inst_dump.size())
                 {
                     if (current_inst.compare(inst_dump.at(i)) == 0)
+                    {
                         wattron(inst_win, A_REVERSE);
-                    mvwprintw(inst_win, 1+i, 1, inst_dump.at(i).c_str());
+                        inst_cursor_position = 1+i-bottom_inst;
+                    }
+                    mvwprintw(inst_win, 1+i-bottom_inst, 1, inst_dump.at(i).c_str());
                     wattroff(inst_win, A_REVERSE);
                 }
             }
@@ -445,8 +460,6 @@ static void curses_loop() {
             wattron(inst_win, A_BOLD);
             mvwprintw(inst_win, 0,1, "Instructions");
             wattroff(inst_win, A_BOLD);
-            
-
         }
         
         // char buf[10];
@@ -461,6 +474,9 @@ static void curses_loop() {
         // Exit
         // getch();
     }
+
+    delwin(reg_win);
+    delwin(inst_win);
     
     endwin();
 }
