@@ -40,6 +40,8 @@
 #include <signal.h>
 #include <arpa/inet.h>
 #include <ncurses.h>
+#include <string>
+#include <vector>
 
 
 #ifdef RS
@@ -100,6 +102,7 @@ static void top_level ();
 static void curses_loop();
 WINDOW *create_newwin(int height, int width, int starty, int startx);
 void destroy_win(WINDOW *local_win);
+std::vector<std::string> dump_instructions(mem_addr addr);
 static int read_token ();
 static bool write_assembled_code(char* program_name);
 static void dump_data_seg (bool kernel_also);
@@ -364,31 +367,43 @@ main (int argc, char **argv)
 
 // God help me.
 static void curses_loop() {	
-    initscr();
-
-    refresh();
-    int i = 0;
 
     // Wooooo hardcoding file names for the win!
     read_assembly_file("../test/hw_03_q2_c.s");
 
+    static int steps;
+    mem_addr addr;
+    bool redo = false;
+
+    addr = PC == 0 ? starting_address() : PC;
+    std::vector<std::string> inst_dump = dump_instructions(addr);
+    printf("%ld\n", inst_dump.size());
+    // return;
+
+    initscr();
+
+    refresh();
+    // int i = 0;
+
     // Reg window will be leftmost and BIG
-    WINDOW* reg_win = create_newwin(28, 105, 1, 1);
+    WINDOW* reg_win = create_newwin(28, 102, 1, 1);
+
+    int instruction_height = 28;
+    WINDOW* inst_win = create_newwin(instruction_height, 105, 1, 107);
   
     // Main loop
-    while(1) {
+    char ch;
+    while((ch = getch()) != 'q'){
 
         refresh();
 
         // erase();
     
         // A hideous implementation of the "step" code
-        static int steps;
-        mem_addr addr;
-        bool redo = false;
-
         steps = (redo ? steps : get_opt_int ());
         addr = PC == 0 ? starting_address () : PC;
+
+        int bottom_inst = 0;
 
         if (steps == 0)
             steps = 1;
@@ -412,19 +427,39 @@ static void curses_loop() {
             mvwprintw(reg_win, 0,1, "Registers");
             wattroff(reg_win, A_BOLD);
 
-            mvprintw(1, 110, inst_to_string (addr));
+            // Dump instruction list to the screen
+            std::string current_inst = inst_to_string (addr);
+            mvprintw(0, 108, inst_to_string (addr));
+            for (int i = bottom_inst; i < bottom_inst + instruction_height - 1; i++)
+            {
+                if (inst_dump.size() > i)
+                {
+                    if (current_inst.compare(inst_dump.at(i)) == 0)
+                        wattron(inst_win, A_REVERSE);
+                    mvwprintw(inst_win, 1+i, 1, inst_dump.at(i).c_str());
+                    wattroff(inst_win, A_REVERSE);
+                }
+            }
+            
+            box(inst_win, 0 , 0);
+            wattron(inst_win, A_BOLD);
+            mvwprintw(inst_win, 0,1, "Instructions");
+            wattroff(inst_win, A_BOLD);
+            
+
         }
         
-        char buf[10];
-        snprintf(buf, 10, " %d ",i);
+        // char buf[10];
+        // snprintf(buf, 10, " %d ",i);
         
-        mvprintw(0, 3, buf);
+        // mvprintw(0, 3, buf);
         wrefresh(reg_win);
+        wrefresh(inst_win);
 
-        i++;
+        // i++;
         
         // Exit
-        getch();
+        // getch();
     }
     
     endwin();
@@ -441,6 +476,37 @@ WINDOW* create_newwin(int height, int width, int starty, int startx)
 	wrefresh(local_win);		/* Show that box 		*/
 
 	return local_win;
+}
+
+std::vector<std::string> dump_instructions(mem_addr addr)
+{
+    std::vector<std::string> instruction_list;
+
+    str_stream ss;
+    instruction *inst;
+    std::string str_inst;
+    int fake_pc = 0;
+
+    //   std::size_t found;
+    do {
+        exception_occurred = 0;
+        inst = read_mem_inst (addr+fake_pc*4);
+
+        if (exception_occurred)
+            {
+            error ("Can't print instruction not in text segment (0x%08x)\n", addr);
+            // return "";
+            }
+
+        ss_init (&ss);
+        format_an_inst (&ss, inst, addr+fake_pc*4);
+        str_inst = ss_to_string(&ss);
+        // printf("%s", ss_to_string(&ss));
+        instruction_list.push_back(str_inst);
+        fake_pc++;
+    } while (str_inst.find("<none>") == std::string::npos);
+
+    return instruction_list;
 }
 
 /* Top-level read-eval-print loop for SPIM. */
