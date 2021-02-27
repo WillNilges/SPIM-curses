@@ -98,6 +98,8 @@ static int read_assembly_command ();
 static int str_prefix (char *s1, char *s2, int min_match);
 static void top_level ();
 static void curses_loop();
+WINDOW *create_newwin(int height, int width, int starty, int startx);
+void destroy_win(WINDOW *local_win);
 static int read_token ();
 static bool write_assembled_code(char* program_name);
 static void dump_data_seg (bool kernel_also);
@@ -363,14 +365,24 @@ main (int argc, char **argv)
 // God help me.
 static void curses_loop() {	
     initscr();
+
+    refresh();
     int i = 0;
+
+    // Wooooo hardcoding file names for the win!
     read_assembly_file("../test/hw_03_q2_c.s");
+
+    // Reg window will be leftmost and BIG
+    WINDOW* reg_win = create_newwin(28, 105, 1, 1);
   
+    // Main loop
     while(1) {
 
-        // while
-        erase();
-        
+        refresh();
+
+        // erase();
+    
+        // A hideous implementation of the "step" code
         static int steps;
         mem_addr addr;
         bool redo = false;
@@ -389,21 +401,25 @@ static void curses_loop() {
             // console_to_spim ();
 
             // Dump registers to the screen
-
             static str_stream ss;
             int hex_flag = 1;
             ss_clear (&ss);
             format_registers (&ss, hex_flag, hex_flag);
-            // write_output (message_out, "%s\n", ss_to_string (&ss));
-            mvprintw(1, 0, ss_to_string (&ss));
+            mvwprintw(reg_win, 1, 0, ss_to_string (&ss)); // ez
+            box(reg_win, 0 , 0);
+
+            wattron(reg_win, A_BOLD);
+            mvwprintw(reg_win, 0,1, "Registers");
+            wattroff(reg_win, A_BOLD);
+
+            mvprintw(1, 110, inst_to_string (addr));
         }
         
         char buf[10];
-        snprintf(buf, 10, "%d\n",i);
+        snprintf(buf, 10, " %d ",i);
         
         mvprintw(0, 3, buf);
-
-        refresh();
+        wrefresh(reg_win);
 
         i++;
         
@@ -412,6 +428,19 @@ static void curses_loop() {
     }
     
     endwin();
+}
+
+
+WINDOW* create_newwin(int height, int width, int starty, int startx)
+{	WINDOW *local_win;
+
+	local_win = newwin(height, width, starty, startx);
+	box(local_win, 0 , 0);		/* 0, 0 gives default characters 
+					 * for the vertical and horizontal
+					 * lines			*/
+	wrefresh(local_win);		/* Show that box 		*/
+
+	return local_win;
 }
 
 /* Top-level read-eval-print loop for SPIM. */
