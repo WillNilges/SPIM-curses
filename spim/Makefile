@@ -113,7 +113,7 @@ CSH = bash
 
 LEXCFLAGS += -O $(CXXFLAGS)
 
-OBJS = spim.o spim-utils.o run.o mem.o inst.o data.o sym-tbl.o parser_yacc.o lex.yy.o \
+OBJS = spimcurses.o spim-utils.o run.o mem.o inst.o data.o sym-tbl.o parser_yacc.o lex.yy.o \
        syscall.o display-utils.o string-stream.o
 
 spim: $(OBJS)
@@ -183,6 +183,6 @@ syscall.o: $(CPU_DIR)/spim.h $(CPU_DIR)/string-stream.h $(CPU_DIR)/inst.h $(CPU_
 
 lex.yy.o: $(CPU_DIR)/spim.h $(CPU_DIR)/string-stream.h $(CPU_DIR)/spim-utils.h $(CPU_DIR)/inst.h $(CPU_DIR)/reg.h $(CPU_DIR)/sym-tbl.h $(CPU_DIR)/parser.h $(CPU_DIR)/scanner.h parser_yacc.h $(CPU_DIR)/op.h
 
-spim.o: $(CPU_DIR)/spim.h $(CPU_DIR)/string-stream.h $(CPU_DIR)/spim-utils.h $(CPU_DIR)/inst.h $(CPU_DIR)/reg.h $(CPU_DIR)/mem.h $(CPU_DIR)/parser.h $(CPU_DIR)/sym-tbl.h $(CPU_DIR)/scanner.h parser_yacc.h
+spimcurses.o: $(CPU_DIR)/spim.h $(CPU_DIR)/string-stream.h $(CPU_DIR)/spim-utils.h $(CPU_DIR)/inst.h $(CPU_DIR)/reg.h $(CPU_DIR)/mem.h $(CPU_DIR)/parser.h $(CPU_DIR)/sym-tbl.h $(CPU_DIR)/scanner.h parser_yacc.h
 
 parser_yacc.o: $(CPU_DIR)/spim.h $(CPU_DIR)/string-stream.h $(CPU_DIR)/spim-utils.h $(CPU_DIR)/inst.h $(CPU_DIR)/reg.h $(CPU_DIR)/mem.h $(CPU_DIR)/sym-tbl.h $(CPU_DIR)/data.h $(CPU_DIR)/scanner.h $(CPU_DIR)/parser.h
