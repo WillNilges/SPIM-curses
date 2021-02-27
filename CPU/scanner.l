@@ -306,7 +306,7 @@ static char scan_escape (char **str);
 			      current_line_no = line_no;
 			      current_line = yytext;
 			    }
-			  yyerror ("Unknown character");
+			  // yyerror ("Unknown character"); // wilnil DEBUG
 			}
 
 

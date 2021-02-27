@@ -39,6 +39,7 @@
 #include <setjmp.h>
 #include <signal.h>
 #include <arpa/inet.h>
+#include <ncurses.h>
 
 
 #ifdef RS
@@ -96,6 +97,7 @@ static void print_all_regs (int hex_flag);
 static int read_assembly_command ();
 static int str_prefix (char *s1, char *s2, int min_match);
 static void top_level ();
+static void curses_loop();
 static int read_token ();
 static bool write_assembled_code(char* program_name);
 static void dump_data_seg (bool kernel_also);
@@ -162,114 +164,151 @@ main (int argc, char **argv)
   if (getenv ("SPIM_EXCEPTION_HANDLER") != NULL)
     exception_file_name = getenv ("SPIM_EXCEPTION_HANDLER");
 
-
-for (i = 1; i < argc; i++) {
+  for (i = 1; i < argc; i++)
+    {
 #ifdef WIN32
-  if (argv[i][0] == '/') {
-    argv[i][0] = '-';
-  }
+      if (argv [i][0] == '/') { argv [i][0] = '-'; }
 #endif
-  if (streq(argv[i], "-asm") || streq(argv[i], "-a")) {
-    bare_machine = false;
-    delayed_branches = false;
-    delayed_loads = false;
-  } else if (streq(argv[i], "-bare") || streq(argv[i], "-b")) {
-    bare_machine = true;
-    delayed_branches = true;
-    delayed_loads = true;
-    quiet = true;
-  } else if (streq(argv[i], "-delayed_branches") || streq(argv[i], "-db")) {
-    delayed_branches = true;
-  } else if (streq(argv[i], "-delayed_loads") || streq(argv[i], "-dl")) {
-    delayed_loads = true;
-  } else if (streq(argv[i], "-exception") || streq(argv[i], "-e")) {
-    load_exception_handler = true;
-  } else if (streq(argv[i], "-noexception") || streq(argv[i], "-ne")) {
-    load_exception_handler = false;
-  } else if (streq(argv[i], "-exception_file") || streq(argv[i], "-ef")) {
-    exception_file_name = argv[++i];
-    load_exception_handler = true;
-  } else if (streq(argv[i], "-mapped_io") || streq(argv[i], "-mio")) {
-    mapped_io = true;
-  } else if (streq(argv[i], "-nomapped_io") || streq(argv[i], "-nmio")) {
-    mapped_io = false;
-  } else if (streq(argv[i], "-pseudo") || streq(argv[i], "-p")) {
-    accept_pseudo_insts = true;
-  } else if (streq(argv[i], "-nopseudo") || streq(argv[i], "-np")) {
-    accept_pseudo_insts = false;
-  } else if (streq(argv[i], "-quiet") || streq(argv[i], "-q")) {
-    quiet = true;
-  } else if (streq(argv[i], "-noquiet") || streq(argv[i], "-nq")) {
-    quiet = false;
-  } else if (streq(argv[i], "-trap") || streq(argv[i], "-t")) {
-    load_exception_handler = true;
-  } else if (streq(argv[i], "-notrap") || streq(argv[i], "-nt")) {
-    load_exception_handler = false;
-  } else if (streq(argv[i], "-trap_file") || streq(argv[i], "-tf")) {
-    exception_file_name = argv[++i];
-    load_exception_handler = true;
-  } else if (streq(argv[i], "-stext") || streq(argv[i], "-st")) {
-    initial_text_size = atoi(argv[++i]);
-  } else if (streq(argv[i], "-sdata") || streq(argv[i], "-sd")) {
-    initial_data_size = atoi(argv[++i]);
-  } else if (streq(argv[i], "-ldata") || streq(argv[i], "-ld")) {
-    initial_data_limit = atoi(argv[++i]);
-  } else if (streq(argv[i], "-sstack") || streq(argv[i], "-ss")) {
-    initial_stack_size = atoi(argv[++i]);
-  } else if (streq(argv[i], "-lstack") || streq(argv[i], "-ls")) {
-    initial_stack_limit = atoi(argv[++i]);
-  } else if (streq(argv[i], "-sktext") || streq(argv[i], "-skt")) {
-    initial_k_text_size = atoi(argv[++i]);
-  } else if (streq(argv[i], "-skdata") || streq(argv[i], "-skd")) {
-    initial_k_data_size = atoi(argv[++i]);
-  } else if (streq(argv[i], "-lkdata") || streq(argv[i], "-lkd")) {
-    initial_k_data_limit = atoi(argv[++i]);
-  } else if (((streq(argv[i], "-file") || streq(argv[i], "-f")) &&
-              (i + 1 < argc))
-             /* Assume this argument is a file name and everything following are
-                arguments for program */
-             || (argv[i][0] != '-')) {
-    program_argc = argc - (i + 1);
-    program_argv = &argv[i + 1]; /* Everything following is argv */
-
-    if (!assembly_file_loaded) {
-      initialize_world(load_exception_handler ? exception_file_name : NULL,
-                       true);
-      initialize_run_stack(program_argc, program_argv);
+      if (streq (argv [i], "-asm")
+      || streq (argv [i], "-a"))
+    {
+      bare_machine = false;
+      delayed_branches = false;
+      delayed_loads = false;
     }
-    assembly_file_loaded =
-        read_assembly_file(argv[++i]) || assembly_file_loaded;
-    break;
-  } else if (streq(argv[i], "-assemble")) {
-    assemble = true;
-  } else if (streq(argv[i], "-dump")) {
-    dump_user_segments = true;
-  } else if (streq(argv[i], "-full_dump")) {
-    dump_all_segments = true;
-  } else {
-    error("\nUnknown argument: %s (ignored)\n", argv[i]);
-    print_usage_msg = 1;
-  }
-}
+      else if (streq (argv [i], "-bare")
+           || streq (argv [i], "-b"))
+    {
+      bare_machine = true;
+      delayed_branches = true;
+      delayed_loads = true;
+      quiet = true;
+    }
+      else if (streq (argv [i], "-delayed_branches")
+           || streq (argv [i], "-db"))
+    {
+      delayed_branches = true;
+    }
+      else if (streq (argv [i], "-delayed_loads")
+           || streq (argv [i], "-dl"))
+    {
+      delayed_loads = true;
+    }
+      else if (streq (argv [i], "-exception")
+           || streq (argv [i], "-e"))
+    { load_exception_handler = true; }
+      else if (streq (argv [i], "-noexception")
+           || streq (argv [i], "-ne"))
+    { load_exception_handler = false; }
+      else if (streq (argv [i], "-exception_file")
+           || streq (argv [i], "-ef"))
+    {
+      exception_file_name = argv[++i];
+      load_exception_handler = true;
+    }
+      else if (streq (argv [i], "-mapped_io")
+           || streq (argv [i], "-mio"))
+    { mapped_io = true; }
+      else if (streq (argv [i], "-nomapped_io")
+           || streq (argv [i], "-nmio"))
+    { mapped_io = false; }
+      else if (streq (argv [i], "-pseudo")
+           || streq (argv [i], "-p"))
+    { accept_pseudo_insts = true; }
+      else if (streq (argv [i], "-nopseudo")
+           || streq (argv [i], "-np"))
+    { accept_pseudo_insts = false; }
+      else if (streq (argv [i], "-quiet")
+           || streq (argv [i], "-q"))
+    { quiet = true; }
+      else if (streq (argv [i], "-noquiet")
+           || streq (argv [i], "-nq"))
+    { quiet = false; }
+      else if (streq (argv [i], "-trap")
+           || streq (argv [i], "-t"))
+    { load_exception_handler = true; }
+      else if (streq (argv [i], "-notrap")
+           || streq (argv [i], "-nt"))
+    { load_exception_handler = false; }
+      else if (streq (argv [i], "-trap_file")
+           || streq (argv [i], "-tf"))
+    {
+      exception_file_name = argv[++i];
+      load_exception_handler = true;
+    }
+      else if (streq (argv [i], "-stext")
+           || streq (argv [i], "-st"))
+    { initial_text_size = atoi (argv[++i]); }
+      else if (streq (argv [i], "-sdata")
+           || streq (argv [i], "-sd"))
+    { initial_data_size = atoi (argv[++i]); }
+      else if (streq (argv [i], "-ldata")
+           || streq (argv [i], "-ld"))
+    { initial_data_limit = atoi (argv[++i]); }
+      else if (streq (argv [i], "-sstack")
+           || streq (argv [i], "-ss"))
+    { initial_stack_size = atoi (argv[++i]); }
+      else if (streq (argv [i], "-lstack")
+           || streq (argv [i], "-ls"))
+    { initial_stack_limit = atoi (argv[++i]); }
+      else if (streq (argv [i], "-sktext")
+           || streq (argv [i], "-skt"))
+    { initial_k_text_size = atoi (argv[++i]); }
+      else if (streq (argv [i], "-skdata")
+           || streq (argv [i], "-skd"))
+    { initial_k_data_size = atoi (argv[++i]); }
+      else if (streq (argv [i], "-lkdata")
+           || streq (argv [i], "-lkd"))
+    { initial_k_data_limit = atoi (argv[++i]); }
+      else if (((streq (argv [i], "-file")
+                 || streq (argv [i], "-f"))
+                && (i + 1 < argc))
+               /* Assume this argument is a file name and everything following are
+                  arguments for program */
+               || (argv [i][0] != '-'))
+    {
+      program_argc = argc - (i + 1);
+      program_argv = &argv[i + 1]; /* Everything following is argv */
+
+      if (!assembly_file_loaded)
+        {
+          initialize_world (load_exception_handler ? exception_file_name : NULL, true);
+          initialize_run_stack (program_argc, program_argv);
+        }
+      assembly_file_loaded = read_assembly_file (argv[++i]) || assembly_file_loaded;
+      break;
+    }
+      else if (streq (argv [i], "-assemble"))
+    { assemble = true; }
+      else if (streq (argv [i], "-dump"))
+        { dump_user_segments = true; }
+      else if (streq (argv [i], "-full_dump"))
+        { dump_all_segments = true; }
+      else
+    {
+      error ("\nUnknown argument: %s (ignored)\n", argv[i]);
+      print_usage_msg = 1;
+    }
+    }
 
   if (print_usage_msg)
     {
       error ("Usage: spim\n\
-	-bare			Bare machine (no pseudo-ops, delayed branches and loads)\n\
-	-asm			Extended machine (pseudo-ops, no delayed branches and loads) (default)\n\
-	-delayed_branches	Execute delayed branches\n\
-	-delayed_loads		Execute delayed loads\n\
-	-exception		Load exception handler (default)\n\
-	-noexception		Do not load exception handler\n\
-	-exception_file <file>	Specify exception handler in place of default\n\
-	-quiet			Do not print warnings\n\
-	-noquiet		Print warnings (default)\n\
-	-mapped_io		Enable memory-mapped IO\n\
-	-nomapped_io		Do not enable memory-mapped IO (default)\n\
-	-file <file> <args>	Assembly code file and arguments to program\n\
-	-assemble		Write assembled code to standard output\n\
-	-dump			Write user data and text segments into files\n\
-	-full_dump		Write user and kernel data and text into files.\n");
+    -bare			Bare machine (no pseudo-ops, delayed branches and loads)\n\
+    -asm			Extended machine (pseudo-ops, no delayed branches and loads) (default)\n\
+    -delayed_branches	Execute delayed branches\n\
+    -delayed_loads		Execute delayed loads\n\
+    -exception		Load exception handler (default)\n\
+    -noexception		Do not load exception handler\n\
+    -exception_file <file>	Specify exception handler in place of default\n\
+    -quiet			Do not print warnings\n\
+    -noquiet		Print warnings (default)\n\
+    -mapped_io		Enable memory-mapped IO\n\
+    -nomapped_io		Do not enable memory-mapped IO (default)\n\
+    -file <file> <args>	Assembly code file and arguments to program\n\
+    -assemble		Write assembled code to standard output\n\
+    -dump			Write user data and text segments into files\n\
+    -full_dump		Write user and kernel data and text into files.\n");
     }
 
 
@@ -277,7 +316,8 @@ for (i = 1; i < argc; i++) {
     {
       initialize_world (load_exception_handler ? exception_file_name : NULL, true);
       initialize_run_stack (program_argc, program_argv);
-      top_level ();
+      // top_level ();
+      curses_loop();
     }
   else /* assembly_file_loaded */
     {
@@ -320,6 +360,59 @@ for (i = 1; i < argc; i++) {
 }
 
 
+// God help me.
+static void curses_loop() {	
+    initscr();
+    int i = 0;
+    read_assembly_file("../test/hw_03_q2_c.s");
+  
+    while(1) {
+
+        // while
+        erase();
+        
+        static int steps;
+        mem_addr addr;
+        bool redo = false;
+
+        steps = (redo ? steps : get_opt_int ());
+        addr = PC == 0 ? starting_address () : PC;
+
+        if (steps == 0)
+            steps = 1;
+        if (addr != 0)
+        {
+            bool continuable;
+            // console_to_program ();
+            if (run_program (addr, 1, false, true, &continuable))
+            write_output (message_out, "Breakpoint encountered at 0x%08x\n", PC);
+            // console_to_spim ();
+
+            // Dump registers to the screen
+
+            static str_stream ss;
+            int hex_flag = 1;
+            ss_clear (&ss);
+            format_registers (&ss, hex_flag, hex_flag);
+            // write_output (message_out, "%s\n", ss_to_string (&ss));
+            mvprintw(1, 0, ss_to_string (&ss));
+        }
+        
+        char buf[10];
+        snprintf(buf, 10, "%d\n",i);
+        
+        mvprintw(0, 3, buf);
+
+        refresh();
+
+        i++;
+        
+        // Exit
+        getch();
+    }
+    
+    endwin();
+}
 
 /* Top-level read-eval-print loop for SPIM. */
 
@@ -334,11 +427,11 @@ top_level ()
   while (1)
     {
       if (!redo)
-	write_output (message_out, "(spim) ");
+    write_output (message_out, "(spim) ");
       if (!setjmp (spim_top_level_env))
-	redo = parse_spim_command (redo);
+    redo = parse_spim_command (redo);
       else
-	redo = false;
+    redo = false;
       fflush (stdout);
       fflush (stderr);
     }
@@ -399,130 +492,130 @@ parse_spim_command (bool redo)
 
     case READ_CMD:
       {
-	int token = (redo ? prev_token : read_token ());
+    int token = (redo ? prev_token : read_token ());
 
-	if (!redo) flush_to_newline ();
-	if (token == Y_STR)
-	  {
-	    read_assembly_file ((char *) yylval.p);
+    if (!redo) flush_to_newline ();
+    if (token == Y_STR)
+      {
+        read_assembly_file ((char *) yylval.p);
         pop_scanner();
-	  }
-	else
-	  error ("Must supply a filename to read\n");
-	prev_cmd = READ_CMD;
-	return (0);
+      }
+    else
+      error ("Must supply a filename to read\n");
+    prev_cmd = READ_CMD;
+    return (0);
       }
 
     case RUN_CMD:
       {
-	static mem_addr addr;
+    static mem_addr addr;
         bool continuable;
 
-	addr = (redo ? addr : get_opt_int ());
-	if (addr == 0)
-	  addr = starting_address ();
+    addr = (redo ? addr : get_opt_int ());
+    if (addr == 0)
+      addr = starting_address ();
 
-	initialize_run_stack (program_argc, program_argv);
-	console_to_program ();
-	if (addr != 0)
-	{
-	  char *undefs = undefined_symbol_string ();
-	  if (undefs != NULL)
-	    {
-	      write_output (message_out, "The following symbols are undefined:\n");
-	      write_output (message_out, undefs);
-	      write_output (message_out, "\n");
-	      free (undefs);
-	    }
+    initialize_run_stack (program_argc, program_argv);
+    console_to_program ();
+    if (addr != 0)
+    {
+      char *undefs = undefined_symbol_string ();
+      if (undefs != NULL)
+        {
+          write_output (message_out, "The following symbols are undefined:\n");
+          write_output (message_out, undefs);
+          write_output (message_out, "\n");
+          free (undefs);
+        }
 
-	  if (run_program (addr, DEFAULT_RUN_STEPS, false, false, &continuable))
-	    write_output (message_out, "Breakpoint encountered at 0x%08x\n", PC);
-	}
-	console_to_spim ();
+      if (run_program (addr, DEFAULT_RUN_STEPS, false, false, &continuable))
+        write_output (message_out, "Breakpoint encountered at 0x%08x\n", PC);
+    }
+    console_to_spim ();
 
-	prev_cmd = RUN_CMD;
-	return (0);
+    prev_cmd = RUN_CMD;
+    return (0);
       }
 
     case CONTINUE_CMD:
       {
-	if (PC != 0)
-	  {
+    if (PC != 0)
+      {
             bool continuable;
-	    console_to_program ();
-	    if (run_program (PC, DEFAULT_RUN_STEPS, false, true, &continuable))
-	      write_output (message_out, "Breakpoint encountered at 0x%08x\n", PC);
-	    console_to_spim ();
-	  }
-	prev_cmd = CONTINUE_CMD;
-	return (0);
+        console_to_program ();
+        if (run_program (PC, DEFAULT_RUN_STEPS, false, true, &continuable))
+          write_output (message_out, "Breakpoint encountered at 0x%08x\n", PC);
+        console_to_spim ();
+      }
+    prev_cmd = CONTINUE_CMD;
+    return (0);
       }
 
     case STEP_CMD:
-      {
-	static int steps;
-	mem_addr addr;
+    {
+        static int steps;
+        mem_addr addr;
 
-	steps = (redo ? steps : get_opt_int ());
-	addr = PC == 0 ? starting_address () : PC;
+        steps = (redo ? steps : get_opt_int ());
+        addr = PC == 0 ? starting_address () : PC;
 
-	if (steps == 0)
-	  steps = 1;
-	if (addr != 0)
-	  {
+        if (steps == 0)
+            steps = 1;
+        if (addr != 0)
+        {
             bool continuable;
-	    console_to_program ();
-	    if (run_program (addr, steps, true, true, &continuable))
-	      write_output (message_out, "Breakpoint encountered at 0x%08x\n", PC);
-	    console_to_spim ();
-	  }
+            console_to_program ();
+            if (run_program (addr, steps, true, true, &continuable))
+            write_output (message_out, "Breakpoint encountered at 0x%08x\n", PC);
+            console_to_spim ();
+        }
 
-	prev_cmd = STEP_CMD;
-	return (0);
+        prev_cmd = STEP_CMD;
+        return (0);
       }
 
     case PRINT_CMD:
       {
-	int token = (redo ? prev_token : read_token ());
-	static int loc;
+    int token = (redo ? prev_token : read_token ());
+    static int loc;
 
-	if (token == Y_REG)
-	  {
-	    if (redo) loc += 1;
-	    else loc = yylval.i;
-	    print_reg (loc);
-	  }
-	else if (token == Y_FP_REG)
-	  {
-	    if (redo) loc += 2;
-	    else loc = yylval.i;
-	    print_fp_reg (loc);
-	  }
-	else if (token == Y_INT)
-	  {
-	    if (redo) loc += 4;
-	    else loc = yylval.i;
-	    print_mem (loc);
-	  }
-	else if (token == Y_ID)
-	  {
-	    if (!print_reg_from_string ((char *) yylval.p))
-	      {
-		if (redo) loc += 4;
-		else loc = find_symbol_address ((char *) yylval.p);
+    if (token == Y_REG)
+      {
+        if (redo) loc += 1;
+        else loc = yylval.i;
+        print_reg (loc);
+      }
+    else if (token == Y_FP_REG)
+      {
+        if (redo) loc += 2;
+        else loc = yylval.i;
+        print_fp_reg (loc);
+      }
+    else if (token == Y_INT)
+      {
+        if (redo) loc += 4;
+        else loc = yylval.i;
+        print_mem (loc);
+      }
+    else if (token == Y_ID)
+      {
+        if (!print_reg_from_string ((char *) yylval.p))
+          {
+        if (redo) loc += 4;
+        else loc = find_symbol_address ((char *) yylval.p);
 
-		if (loc != 0)
-		  print_mem (loc);
-		else
-		  error ("Unknown label: %s\n", yylval.p);
-	      }
-	  }
-	else
-	  error ("Print what?\n");
-	if (!redo) flush_to_newline ();
-	prev_cmd = PRINT_CMD;
-	prev_token = token;
-	return (0);
+        if (loc != 0)
+          print_mem (loc);
+        else
+          error ("Unknown label: %s\n", yylval.p);
+          }
+      }
+    else
+      error ("Print what?\n");
+    if (!redo) flush_to_newline ();
+    prev_cmd = PRINT_CMD;
+    prev_token = token;
+    return (0);
       }
 
     case PRINT_SYM_CMD:
@@ -533,14 +626,14 @@ parse_spim_command (bool redo)
 
     case PRINT_ALL_REGS_CMD:
       {
-	int hex_flag = 0;
-	int token = (redo ? prev_token : read_token ());
-	if (token == Y_ID && streq((char*)yylval.p, "hex"))
-	  hex_flag = 1;
-	print_all_regs (hex_flag);
-	if (!redo) flush_to_newline ();
-	prev_cmd = NOP_CMD;
-	return (0);
+    int hex_flag = 0;
+    int token = (redo ? prev_token : read_token ());
+    if (token == Y_ID && streq((char*)yylval.p, "hex"))
+      hex_flag = 1;
+    print_all_regs (hex_flag);
+    if (!redo) flush_to_newline ();
+    prev_cmd = NOP_CMD;
+    return (0);
       }
 
     case REINITIALIZE_CMD:
@@ -570,42 +663,42 @@ parse_spim_command (bool redo)
       write_output (message_out, "exit  -- Exit the simulator\n");
       write_output (message_out, "quit  -- Exit the simulator\n");
       write_output (message_out,
-		    "read \"FILE\" -- Read FILE containing assembly code into memory\n");
+            "read \"FILE\" -- Read FILE containing assembly code into memory\n");
       write_output (message_out,
-		    "load \"FILE\" -- Same as read\n");
+            "load \"FILE\" -- Same as read\n");
       write_output (message_out,
-		    "run <ADDR> -- Start the program at (optional) ADDRESS\n");
+            "run <ADDR> -- Start the program at (optional) ADDRESS\n");
       write_output (message_out,
-		    "step <N> -- Step the program for N instructions (default 1)\n");
+            "step <N> -- Step the program for N instructions (default 1)\n");
       write_output (message_out,
-		    "continue -- Continue program execution without stepping\n");
+            "continue -- Continue program execution without stepping\n");
       write_output (message_out, "print $N -- Print register N\n");
       write_output (message_out,
-		    "print $fN -- Print floating point register N\n");
+            "print $fN -- Print floating point register N\n");
       write_output (message_out,
-		    "print ADDR -- Print contents of memory at ADDRESS\n");
+            "print ADDR -- Print contents of memory at ADDRESS\n");
       write_output (message_out,
-		    "print_symbols -- Print all global symbols\n");
+            "print_symbols -- Print all global symbols\n");
       write_output (message_out,
-		    "print_all_regs -- Print all MIPS registers\n");
+            "print_all_regs -- Print all MIPS registers\n");
       write_output (message_out,
-		    "print_all_regs hex -- Print all MIPS registers in hex\n");
+            "print_all_regs hex -- Print all MIPS registers in hex\n");
       write_output (message_out,
-		    "reinitialize -- Clear the memory and registers\n");
+            "reinitialize -- Clear the memory and registers\n");
       write_output (message_out,
-		    "breakpoint <ADDR> -- Set a breakpoint at address ADDR\n");
+            "breakpoint <ADDR> -- Set a breakpoint at address ADDR\n");
       write_output (message_out,
-		    "delete <ADDR> -- Delete breakpoint at address ADDR\n");
+            "delete <ADDR> -- Delete breakpoint at address ADDR\n");
       write_output (message_out, "list -- List all breakpoints\n");
       write_output (message_out, "dump [ \"FILE\" ] -- Dump binary code to spim.dump or FILE in network byte order\n");
       write_output (message_out, "dumpnative [ \"FILE\" ] -- Dump binary code to spim.dump or FILE in host byte order\n");
       write_output (message_out,
-		    ". -- Rest of line is assembly instruction to execute\n");
+            ". -- Rest of line is assembly instruction to execute\n");
       write_output (message_out, "<cr> -- Newline reexecutes previous command\n");
       write_output (message_out, "? -- Print this message\n");
 
       write_output (message_out,
-		    "\nMost commands can be abbreviated to their unique prefix\n");
+            "\nMost commands can be abbreviated to their unique prefix\n");
       write_output (message_out, "e.g., ex(it), re(ad), l(oad), ru(n), s(tep), p(rint)\n\n");
       prev_cmd = HELP_CMD;
       return (0);
@@ -613,23 +706,23 @@ parse_spim_command (bool redo)
     case SET_BKPT_CMD:
     case DELETE_BKPT_CMD:
       {
-	int token = (redo ? prev_token : read_token ());
-	static mem_addr addr;
+    int token = (redo ? prev_token : read_token ());
+    static mem_addr addr;
 
-	if (!redo) flush_to_newline ();
-	if (token == Y_INT)
-	  addr = redo ? addr + 4 : (mem_addr)yylval.i;
-	else if (token == Y_ID)
-	  addr = redo ? addr + 4 : find_symbol_address ((char *) yylval.p);
-	else
-	  error ("Must supply an address for breakpoint\n");
-	if (cmd == SET_BKPT_CMD)
-	  add_breakpoint (addr);
-	else
-	  delete_breakpoint (addr);
-	prev_cmd = cmd;
+    if (!redo) flush_to_newline ();
+    if (token == Y_INT)
+      addr = redo ? addr + 4 : (mem_addr)yylval.i;
+    else if (token == Y_ID)
+      addr = redo ? addr + 4 : find_symbol_address ((char *) yylval.p);
+    else
+      error ("Must supply an address for breakpoint\n");
+    if (cmd == SET_BKPT_CMD)
+      add_breakpoint (addr);
+    else
+      delete_breakpoint (addr);
+    prev_cmd = cmd;
 
-	return (0);
+    return (0);
       }
 
     case LIST_BKPT_CMD:
@@ -641,20 +734,20 @@ parse_spim_command (bool redo)
     case DUMPNATIVE_TEXT_CMD:
     case DUMP_TEXT_CMD:
       {
-	int token = (redo ? prev_token : read_token ());
+    int token = (redo ? prev_token : read_token ());
 
         FILE *fp = NULL;
         char *filename = NULL;
 
         int words = 0;
         mem_addr addr;
-	mem_addr dump_start;
-	mem_addr dump_end;
+    mem_addr dump_start;
+    mem_addr dump_end;
 
         if (token == Y_STR)
-	  filename = (char *) yylval.p;
+      filename = (char *) yylval.p;
         else if (token == Y_NL)
-	  filename = "spim.dump";
+      filename = "spim.dump";
         else
           {
             fprintf (stderr, "usage: %s [ \"filename\" ]\n",
@@ -669,15 +762,15 @@ parse_spim_command (bool redo)
             return (0);
           }
 
-	user_kernel_text_segment (false);
-	dump_start = find_symbol_address (END_OF_TRAP_HANDLER_SYMBOL);
-	dump_end = current_text_pc ();
+    user_kernel_text_segment (false);
+    dump_start = find_symbol_address (END_OF_TRAP_HANDLER_SYMBOL);
+    dump_end = current_text_pc ();
 
         for (addr = dump_start; addr < dump_end; addr += BYTES_PER_WORD)
           {
             int32 code = inst_encode (read_mem_inst (addr));
             if (cmd == DUMP_TEXT_CMD)
-	      code = (int32)htonl ((unsigned long)code);    /* dump in network byte order */
+          code = (int32)htonl ((unsigned long)code);    /* dump in network byte order */
             (void)fwrite (&code, 1, sizeof(code), fp);
             words += 1;
           }
@@ -1060,7 +1153,7 @@ read_input (char *str, int str_size)
       str_size -= 1;
 
       if (buf[0] == '\n')
-	break;
+    break;
     }
 
   if (0 < str_size)

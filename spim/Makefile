@@ -106,7 +106,7 @@ DEFINES = $(MEM_SIZES) -DDEFAULT_EXCEPTION_HANDLER="\"$(EXCEPTION_DIR)/exception
 CXX = g++
 CXXFLAGS += -I. -I$(CPU_DIR) $(DEFINES) -O -g -Wall -pedantic -Wextra -Wunused -Wno-write-strings -x c++
 YCFLAGS +=
-LDFLAGS += -lm
+LDFLAGS += -lm -lncursesw
 CSH = bash
 
 # lex.yy.cpp is usually compiled with -O to speed it up.
