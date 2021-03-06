@@ -42,6 +42,7 @@
 #include <ncurses.h>
 #include <string>
 #include <vector>
+#include <getopt.h>
 
 
 #ifdef RS
@@ -127,8 +128,71 @@ static char** program_argv;
 // static bool dump_user_segments = false;
 // static bool dump_all_segments = false;
 
-int main () //(int argc, char **argv)
+int main(int argc, char **argv)
 {
+  /*-------------------------------------------------------------------------
+  These variables are used to control the getOpt_long_only command line
+  parsing utility.
+  --------------------------------------------------------------------------*/
+  /* getopt_long stores the option index here. */
+  int option_index = 0;
+  int rc;
+  
+  /* Command line parameters */
+  int help = 0;
+  char *in_file = NULL;
+  
+  /*-------------------------------------------------------------------------
+  add getopt_long parsing code here
+  --------------------------------------------------------------------------*/
+  
+  /* This contains the short command line parameters list   In general
+  they SHOULD match the long parameter but DONT HAVE TO
+  e.g:  verbose  AND  g    */
+  char *getoptOptions = "hf:";
+  
+  /* This contains the long command line parameter list, it should mostly
+  match the short list                                                  */
+  struct option long_options[] = {
+    /* These options set the same flag. */
+    {"help",           no_argument, 0, 'h'},
+    
+    {"file",    required_argument, 0, 'f'}, 
+    
+    {0, 0, 0, 0} /* Terminate */
+  };
+
+
+  while ((rc = getopt_long_only(argc, argv, getoptOptions, long_options, &option_index)) != -1){
+    switch (rc) {
+      case 'f':
+        in_file = optarg;
+        break;
+
+      case 'h':
+        help = 1;
+        break;
+
+      case '?':         /* Handle the error cases */
+        if (optopt == 'c' || optopt == 'd') {
+          fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+        }
+
+        else if (isprint (optopt)) {  /* character is printable */
+          fprintf (stderr, "Unknown option `-%c'.\n", optopt);
+        }
+
+        else {         /* Character is NOT printable   */
+          fprintf (stderr,  "Unknown option character '%x'.\n", optopt);
+        }
+        return 1;
+
+      default:       /* oops,  unexpected result */
+        fprintf (stderr, "Unexpected result %xX at line %d\n", rc, __LINE__);
+        exit(99);
+    }
+  }
+
     // int i;
     // bool assembly_file_loaded = false;
     // int print_usage_msg = 0;
@@ -153,21 +217,19 @@ int main () //(int argc, char **argv)
     if (getenv ("SPIM_EXCEPTION_HANDLER") != NULL)
         exception_file_name = getenv ("SPIM_EXCEPTION_HANDLER");
 
-
     initialize_world (load_exception_handler ? exception_file_name : NULL, true);
     initialize_run_stack (program_argc, program_argv);
+
+    // Load in the assembly file you'd like to step through
+    read_assembly_file(in_file);
+
     curses_loop();
 
     return (spim_return_value);
 }
 
-
 // God help me.
 static void curses_loop() {	
-
-    // Wooooo hardcoding file names for the win!
-    read_assembly_file("../test/hw_03_q2_c.s");
-
     static int steps;
     mem_addr addr;
     // bool redo = false;
@@ -175,22 +237,35 @@ static void curses_loop() {
     addr = PC == 0 ? starting_address() : PC;
     std::vector<std::string> inst_dump = dump_instructions(addr);
     printf("%ld\n", inst_dump.size());
-    // return;
 
-    initscr();
+    initscr(); // Init ncurses
 
+    noecho();    // Don't echo input to screen
+    curs_set(0); // Don't show terminal cursor
+    
+    // Get bounds of display
+    int max_row, max_col;
+    getmaxyx(stdscr, max_row, max_col);
+    
     refresh();
-    // int i = 0;
 
-    // Reg window will be leftmost and BIG
-    WINDOW* reg_win = create_newwin(28, 102, 1, 1);
+    // Window to be shown on the left
+    int reg_win_y = 1;
+    int reg_win_x = 1;
+    int reg_win_height = 28;
+    int reg_win_width = max_col/2;
+    WINDOW* reg_win = create_newwin(reg_win_height, reg_win_width, reg_win_y, reg_win_x);
 
-    int instruction_height = 28;
+    // Window to be shown on the right
     int inst_win_y = 1;
-    WINDOW* inst_win = create_newwin(instruction_height, 105, inst_win_y, 107);
+    int inst_win_x = reg_win_width + reg_win_x + 1;
+    int inst_win_height = 28;
+    int inst_win_width = max_col - inst_win_x;
+    WINDOW* inst_win = create_newwin(inst_win_height, inst_win_width, inst_win_y, inst_win_x);
 
     int inst_cursor_position = 0;
     int bottom_inst = 0;
+    bool continuable;
   
     // Main loop
     char ch;
@@ -203,17 +278,38 @@ static void curses_loop() {
         // A hideous implementation of the "step" code
         // steps = (redo ? steps : get_opt_int ());
         addr = PC == 0 ? starting_address () : PC;
+        if (!setjmp (spim_top_level_env)) {
 
         if (steps == 0)
             steps = 1;
         if (addr != 0)
         {
-            bool continuable;
-            // console_to_program ();
-            if (run_program (addr, 1, false, true, &continuable))
-            write_output (message_out, "Breakpoint encountered at 0x%08x\n", PC);
-            // console_to_spim ();
+            char *undefs = undefined_symbol_string ();
+            if (undefs != NULL)
+            {
+                write_output (message_out, "The following symbols are undefined:\n");
+                write_output (message_out, undefs);
+                write_output (message_out, "\n");
+                free (undefs);
+                
+                delwin(reg_win);
+                delwin(inst_win);
+                
+                endwin();
+                return;
+            }
+            console_to_program();
+            if (run_program (addr, 1, false, false, &continuable))
+            {
+                // write_output (message_out, "Breakpoint encountered at 0x%08x\n", PC);
 
+                delwin(reg_win);
+                delwin(inst_win);
+                
+                endwin();
+                return;
+            }
+            
             // Dump registers to the screen
             static str_stream ss;
             int hex_flag = 1;
@@ -226,7 +322,7 @@ static void curses_loop() {
             mvwprintw(reg_win, 0,1, "Registers");
             wattroff(reg_win, A_BOLD);
 
-            if (inst_cursor_position + 5 > instruction_height)
+            if (inst_cursor_position + 5 > inst_win_height)
             {
                 bottom_inst += 5;
                 werase(inst_win);
@@ -238,8 +334,7 @@ static void curses_loop() {
 
             // Dump instruction list to the screen
             std::string current_inst = inst_to_string (addr);
-            mvprintw(0, 108, inst_to_string (addr)); // Print current inst at the top
-            for (int i = bottom_inst; i < bottom_inst + instruction_height - 1; i++)
+            for (int i = bottom_inst; i < bottom_inst + inst_win_height - 1; i++)
             {
                 if ((long unsigned int) i < inst_dump.size())
                 {
@@ -257,19 +352,12 @@ static void curses_loop() {
             wattron(inst_win, A_BOLD);
             mvwprintw(inst_win, 0,1, "Instructions");
             wattroff(inst_win, A_BOLD);
+            console_to_spim();
+        }
         }
         
-        // char buf[10];
-        // snprintf(buf, 10, " %d ",i);
-        
-        // mvprintw(0, 3, buf);
         wrefresh(reg_win);
         wrefresh(inst_win);
-
-        // i++;
-        
-        // Exit
-        // getch();
     }
 
     delwin(reg_win);
