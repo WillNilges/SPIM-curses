@@ -112,8 +112,11 @@ bool mapped_io;			/* => activate memory-mapped IO */
 int pipe_out;
 int spim_return_value;		/* Value returned when spim exits */
 
-
 /* Local variables: */
+
+
+/* Handy ncurses variables */
+int max_row, max_col;
 
 /* => load standard exception handler */
 static bool load_exception_handler = true;
@@ -236,7 +239,7 @@ static void curses_loop() {
 
     addr = PC == 0 ? starting_address() : PC;
     std::vector<std::string> inst_dump = dump_instructions(addr);
-    printf("%ld\n", inst_dump.size());
+    // printf("%ld\n", inst_dump.size()); // Print length of instruction dump
 
     initscr(); // Init ncurses
 
@@ -244,7 +247,6 @@ static void curses_loop() {
     curs_set(0); // Don't show terminal cursor
     
     // Get bounds of display
-    int max_row, max_col;
     getmaxyx(stdscr, max_row, max_col);
     
     refresh();
@@ -500,10 +502,15 @@ run_error (char *fmt, ...)
 #endif
     va_end (args);
     
-    WINDOW* error_win = create_newwin(10, 80, 2, 10);
+    // Open a handy error dialogue
+    int err_win_y = max_row/2 - 5;
+    int err_win_x = max_col/2 - 40;
+    int err_win_height = 10;
+    int err_win_width = 80;
+    WINDOW* error_win = create_newwin(err_win_height, err_win_width, err_win_y, err_win_x);
     wattron(error_win, A_BOLD);
-    mvwprintw(error_win, 2, 2, "ERROR ! ! !");
-    mvwprintw(error_win, 4, 4, format);
+    mvwprintw(error_win, err_win_height/2 - 2, err_win_width/2 - strlen("ERROR ! ! !")/2, "ERROR ! ! !");
+    mvwprintw(error_win, err_win_height/2, err_win_width/2 - strlen(format)/2, format);
     refresh();
     wrefresh(error_win);
     attroff(A_BOLD);
