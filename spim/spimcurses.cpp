@@ -278,8 +278,9 @@ static void curses_loop() {
         // A hideous implementation of the "step" code
         // steps = (redo ? steps : get_opt_int ());
         addr = PC == 0 ? starting_address () : PC;
-        if (!setjmp (spim_top_level_env)) {
 
+        // Okay what the actual fuck...
+        if (!setjmp (spim_top_level_env)) {
         if (steps == 0)
             steps = 1;
         if (addr != 0)
@@ -484,19 +485,30 @@ fatal_error (char *fmt, ...)
 void
 run_error (char *fmt, ...)
 {
-  va_list args;
+    char format[80];
+    
+    va_list args;
 
-  va_start (args, fmt);
+    va_start (args, fmt);
 
-  console_to_spim ();
+    console_to_spim ();
 
 #ifdef NEED_VFPRINTF
-  _doprnt (fmt, args, stderr);
+    _doprnt (fmt, args, stderr);
 #else
-  vfprintf (stderr, fmt, args);
+    vsnprintf (format, 80, fmt, args);
 #endif
-  va_end (args);
-  longjmp (spim_top_level_env, 1);
+    va_end (args);
+    
+    WINDOW* error_win = create_newwin(10, 80, 2, 10);
+    wattron(error_win, A_BOLD);
+    mvwprintw(error_win, 2, 2, "ERROR ! ! !");
+    mvwprintw(error_win, 4, 4, format);
+    refresh();
+    wrefresh(error_win);
+    attroff(A_BOLD);
+
+    longjmp (spim_top_level_env, 1);
 }
 
 
