@@ -44,6 +44,10 @@
 #include <vector>
 #include <getopt.h>
 
+#include <sstream>
+#include <cstdint>
+#include <iostream>
+#include <iomanip>
 
 #ifdef RS
 /* This is problem on HP Snakes, which define RS in syscall.h */
@@ -58,7 +62,6 @@
 #define NBBY 8
 #endif
 #endif
-
 
 #ifndef WIN32
 #include <sys/time.h>
@@ -114,6 +117,36 @@ int spim_return_value;		/* Value returned when spim exits */
 
 /* Local variables: */
 
+#define WORD_WIDTH_10 10
+#define WORD_WIDTH_16 8
+#define WORD_WIDTH_DEFAULT 32
+
+// Data window
+//
+bool st_showUserDataSegment   = true;
+bool st_showUserStackSegment  = true;
+bool st_showKernelDataSegment = true;
+int st_dataSegmentDisplayBase = 16;
+
+// Data segment window
+//
+std::string displayDataSegments();
+std::string formatUserDataSeg();
+std::string formatUserStack();
+std::string formatKernelDataSeg();
+std::string formatMemoryContents(mem_addr from, mem_addr to);
+std::string formatPartialQuadWord(mem_addr from, mem_addr to);
+std::string formatAsChars(mem_addr from, mem_addr to);
+std::string rightJustified(std::string input, int width, char padding);
+
+// Format SPIM abstractions for display
+//
+std::string formatAddress(mem_addr addr);
+std::string formatWord(mem_word word, int base);
+std::string formatChar(int chr);
+std::string formatSegLabel(std::string segName, mem_addr low, mem_addr high);
+
+std::string nnbsp(int n);
 
 /* Handy ncurses variables */
 int max_row, max_col;
@@ -336,20 +369,22 @@ static void curses_loop() {
             }
 
             // Dump instruction list to the screen
-            std::string current_inst = inst_to_string (addr);
-            for (int i = bottom_inst; i < bottom_inst + inst_win_height - 1; i++)
-            {
-                if ((long unsigned int) i < inst_dump.size())
-                {
-                    if (current_inst.compare(inst_dump.at(i)) == 0)
-                    {
-                        wattron(inst_win, A_REVERSE);
-                        inst_cursor_position = 1+i-bottom_inst;
-                    }
-                    mvwprintw(inst_win, 1+i-bottom_inst, 1, inst_dump.at(i).c_str());
-                    wattroff(inst_win, A_REVERSE);
-                }
-            }
+            // std::string current_inst = inst_to_string (addr);
+            // for (int i = bottom_inst; i < bottom_inst + inst_win_height - 1; i++)
+            // {
+            //     if ((long unsigned int) i < inst_dump.size())
+            //     {
+            //         if (current_inst.compare(inst_dump.at(i)) == 0)
+            //         {
+            //             wattron(inst_win, A_REVERSE);
+            //             inst_cursor_position = 1+i-bottom_inst;
+            //         }
+            //         mvwprintw(inst_win, 1+i-bottom_inst, 1, inst_dump.at(i).c_str());
+            //         wattroff(inst_win, A_REVERSE);
+            //     }
+            // }
+            
+            mvwprintw(inst_win, 1, 1, displayDataSegments().c_str());
             
             box(inst_win, 0 , 0);
             wattron(inst_win, A_BOLD);
@@ -412,6 +447,252 @@ std::vector<std::string> dump_instructions(mem_addr addr)
 
     return instruction_list;
 }
+
+
+//
+// Data segment window
+//
+
+std::string displayDataSegments()
+{
+    std::string window_contents;
+    window_contents += formatUserDataSeg() + formatUserStack() + formatKernelDataSeg();
+    return window_contents;
+}
+
+
+std::string formatUserDataSeg()
+{
+    if (st_showUserDataSegment)
+    {
+        return formatSegLabel("User data segment", DATA_BOT, data_top)
+            + formatMemoryContents(DATA_BOT, data_top);
+    }
+    else
+    {
+        return std::string("");
+    }
+}
+
+
+std::string formatUserStack()
+{
+    if (st_showUserStackSegment)
+    {
+        return formatSegLabel("\nUser Stack", ROUND_DOWN(R[29], BYTES_PER_WORD), STACK_TOP)
+            + formatMemoryContents(ROUND_DOWN(R[29], BYTES_PER_WORD), STACK_TOP);
+    }
+    else
+    {
+        return std::string("");
+    }
+}
+
+
+std::string formatKernelDataSeg()
+{
+    if (st_showKernelDataSegment)
+    {
+        return formatSegLabel("\nKernel data segment", K_DATA_BOT, k_data_top)
+            + formatMemoryContents(K_DATA_BOT, k_data_top);
+    }
+    else
+    {
+        return std::string("");
+    }
+}
+
+
+#define BYTES_PER_LINE (4*BYTES_PER_WORD)
+
+
+std::string formatMemoryContents(mem_addr from, mem_addr to)
+{
+    mem_addr i = ROUND_UP(from, BYTES_PER_WORD);
+    std::string windowContents = formatPartialQuadWord(i, to);
+    i = ROUND_UP(i, BYTES_PER_LINE); // Next quadword
+
+    for ( ; i < to; )
+    {
+        mem_word val;
+
+        /* Count consecutive zero words */
+        int j;
+        for (j = 0; (i + (uint32) j * BYTES_PER_WORD) < to; j += 1)
+	{
+            val = read_mem_word(i + (uint32) j * BYTES_PER_WORD);
+            if (val != 0)
+	    {
+                break;
+	    }
+	}
+
+        if (j >= 4)
+	{
+            /* Block of 4 or more zero memory words: */
+            windowContents += "[" + formatAddress(i)
+                + "]..[" + formatAddress(i + (uint32) j * BYTES_PER_WORD - 1)
+                + "]" + nnbsp(2) + "00000000\n";
+
+            i = i + (uint32) j * BYTES_PER_WORD;
+            windowContents += formatPartialQuadWord(i, to);
+            i = ROUND_UP(i, BYTES_PER_LINE); // Next quadword
+	}
+        else
+	{
+            /* Fewer than 4 zero words, print them on a single line: */
+            windowContents += "[" + formatAddress(i) + "]" + nnbsp(2);
+            mem_addr j = i;
+            do
+	    {
+                val = read_mem_word(i);
+                windowContents += nnbsp(2) + formatWord(val, st_dataSegmentDisplayBase);
+                i += BYTES_PER_WORD;
+	    }
+            while ((i % BYTES_PER_LINE) != 0 && i < to);
+
+            windowContents += nnbsp(2) + formatAsChars(j, i) + std::string("\n");
+	}
+    }
+    return windowContents;
+}
+
+
+std::string formatPartialQuadWord(mem_addr from, mem_addr to)
+{
+    std::string windowContents = std::string("");
+
+    if ((from % BYTES_PER_LINE) != 0 && from < to)
+    {
+        windowContents += "[" + formatAddress(from) + "]" + nnbsp(2);
+
+        mem_addr a;
+        for (a = from; (a % BYTES_PER_LINE) != 0 && from < to; a += BYTES_PER_WORD)
+	{
+            mem_word val = read_mem_word(a);
+            windowContents += nnbsp(2) + formatWord(val, st_dataSegmentDisplayBase);
+	}
+
+        windowContents += formatAsChars(from, a) + "\n";
+    }
+
+    return windowContents;
+}
+
+
+std::string formatAsChars(mem_addr from, mem_addr to)
+{
+    std::string windowContents = nnbsp(2);
+
+    if (to - from != BYTES_PER_LINE)
+    {
+        int missing = (BYTES_PER_LINE - (to - from)) / BYTES_PER_WORD;
+        windowContents += nnbsp(2);
+        switch (st_dataSegmentDisplayBase)
+        {
+        case 10: windowContents += nnbsp(missing * (WORD_WIDTH_10 + 2)); break;
+        case 16: windowContents += nnbsp(missing * (WORD_WIDTH_16 + 2)); break;
+        default: windowContents += nnbsp(missing * (WORD_WIDTH_DEFAULT + 2)); break;
+        }
+    }
+
+    for (mem_addr a = from; a < to; a += 1)
+    {
+        mem_word val = read_mem_byte(a);
+        windowContents += val + " ";
+    }
+
+    return windowContents;
+}
+
+
+//
+// Utility functions
+//
+
+std::string nnbsp(int n)
+{
+    std::string str = "";
+    int i;
+    for (i = 0; i < n; i++)
+    {
+        str += " ";
+    }
+    return str;
+}
+
+
+std::string formatAddress(mem_addr addr)
+{
+    std::stringstream ss;
+    ss << std::setfill('0') << std::setw(8) << std::hex << addr;   
+    return ss.str();
+}
+
+std::string rightJustified(std::string input, int width, char padding)
+{
+    std::stringstream ss;
+    ss << std::setfill(padding) << std::setw(width) << input;   
+    return ss.str();
+}
+
+std::string formatWord(mem_word word, int base)
+{
+    int width = 0;
+    switch (base)
+    {
+    case 10: width = WORD_WIDTH_10; break;
+    case 16: width = WORD_WIDTH_16; break;
+    default: width = WORD_WIDTH_DEFAULT; break;
+    }
+    // std::string str = std::string::number(word, base);
+
+    std::stringstream ss;
+    ss << std::setfill('0') << std::setw(8) << std::hex << word;   
+    std::string str = ss.str();
+    str.erase(0, str.length() - width); // Negative hex number proceeded by 0xffffffff
+
+    if (str[0] == '-')                   // decimal starting with a negative sign
+        return rightJustified(str, width, ' '); // Don't zero pad
+    else
+        return rightJustified(str, width, '0');
+}
+
+
+// std::string formatChar(int chr)
+// {
+//     if (chr == ' ')
+//     {
+//         return std::string("&nbsp;");
+//     }
+//     else if (chr == '<')
+//     {
+//         return std::string("&lt;");
+//     }
+//     else if (chr == '>')
+//     {
+//         return std::string("&gt;");
+//     }
+//     else if (chr == '&')
+//     {
+//         return std::string("&amp;");
+//     }
+//     else if (chr > ' ' && chr <= '~') // Printable ascii chars
+//     {
+//         return std::string(QChar(chr));
+//     }
+//     else
+//     {
+//         return std::string(QChar('.'));
+//     }
+// }
+
+
+std::string formatSegLabel(std::string segName, mem_addr low, mem_addr high)
+{
+    return segName + " [" + formatAddress(low) + "]..[" + formatAddress(high) + std::string("]");
+}
+
 
 static void
 control_c_seen (int /*arg*/)
