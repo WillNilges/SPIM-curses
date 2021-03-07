@@ -383,8 +383,16 @@ static void curses_loop() {
             //         wattroff(inst_win, A_REVERSE);
             //     }
             // }
-            
-            mvwprintw(inst_win, 1, 1, displayDataSegments().c_str());
+
+            int line = 0;
+            std::istringstream mem_map_stream(displayDataSegments());
+            while (!mem_map_stream.eof() || line < inst_win_height)
+            {
+                std::string mem_line;
+                getline(mem_map_stream, mem_line);
+                mvwprintw(inst_win, line, 1, mem_line.c_str());
+                line++;
+            }
             
             box(inst_win, 0 , 0);
             wattron(inst_win, A_BOLD);
@@ -466,7 +474,7 @@ std::string formatUserDataSeg()
     if (st_showUserDataSegment)
     {
         return formatSegLabel("User data segment", DATA_BOT, data_top)
-            + formatMemoryContents(DATA_BOT, data_top);
+            + "\n" + formatMemoryContents(DATA_BOT, data_top);
     }
     else
     {
@@ -480,7 +488,7 @@ std::string formatUserStack()
     if (st_showUserStackSegment)
     {
         return formatSegLabel("\nUser Stack", ROUND_DOWN(R[29], BYTES_PER_WORD), STACK_TOP)
-            + formatMemoryContents(ROUND_DOWN(R[29], BYTES_PER_WORD), STACK_TOP);
+            + "\n" + formatMemoryContents(ROUND_DOWN(R[29], BYTES_PER_WORD), STACK_TOP);
     }
     else
     {
@@ -494,7 +502,7 @@ std::string formatKernelDataSeg()
     if (st_showKernelDataSegment)
     {
         return formatSegLabel("\nKernel data segment", K_DATA_BOT, k_data_top)
-            + formatMemoryContents(K_DATA_BOT, k_data_top);
+            + "\n" + formatMemoryContents(K_DATA_BOT, k_data_top);
     }
     else
     {
