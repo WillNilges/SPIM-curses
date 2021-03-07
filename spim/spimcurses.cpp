@@ -138,6 +138,7 @@ std::string formatMemoryContents(mem_addr from, mem_addr to);
 std::string formatPartialQuadWord(mem_addr from, mem_addr to);
 std::string formatAsChars(mem_addr from, mem_addr to);
 std::string rightJustified(std::string input, int width, char padding);
+void show_data_memory(WINDOW* target_window, int start_line, int target_height);
 
 // Format SPIM abstractions for display
 //
@@ -145,7 +146,6 @@ std::string formatAddress(mem_addr addr);
 std::string formatWord(mem_word word, int base);
 std::string formatChar(int chr);
 std::string formatSegLabel(std::string segName, mem_addr low, mem_addr high);
-
 std::string nnbsp(int n);
 
 /* Handy ncurses variables */
@@ -368,7 +368,7 @@ static void curses_loop() {
                 werase(inst_win);
             }
 
-            // Dump instruction list to the screen
+            //// Display instruction list
             // std::string current_inst = inst_to_string (addr);
             // for (int i = bottom_inst; i < bottom_inst + inst_win_height - 1; i++)
             // {
@@ -384,15 +384,7 @@ static void curses_loop() {
             //     }
             // }
 
-            int line = 0;
-            std::istringstream mem_map_stream(displayDataSegments());
-            while (!mem_map_stream.eof() || line < inst_win_height)
-            {
-                std::string mem_line;
-                getline(mem_map_stream, mem_line);
-                mvwprintw(inst_win, line, 1, mem_line.c_str());
-                line++;
-            }
+            show_data_memory(inst_win, 1, inst_win_height);
             
             box(inst_win, 0 , 0);
             wattron(inst_win, A_BOLD);
@@ -456,6 +448,27 @@ std::vector<std::string> dump_instructions(mem_addr addr)
     return instruction_list;
 }
 
+// Display memory map
+void show_data_memory(WINDOW* target_window, int start_line, int target_height)
+{
+    int line = start_line;
+    std::istringstream mem_map_stream(displayDataSegments());
+    while (!mem_map_stream.eof() || line < target_height)
+    {
+        std::string mem_line;
+        getline(mem_map_stream, mem_line);
+
+        // Bold the titles of each section of memory
+        if (mem_line.find("Kernel data segment") != std::string::npos ||
+            mem_line.find("User Stack")          != std::string::npos ||
+            mem_line.find("User data segment")   != std::string::npos)
+            wattron(target_window, A_BOLD);
+            
+        mvwprintw(target_window, line, 1, mem_line.c_str());
+        wattroff(target_window, A_BOLD);
+        line++;
+    }
+}
 
 //
 // Data segment window
