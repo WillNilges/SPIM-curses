@@ -303,6 +303,8 @@ static void curses_loop() {
     int inst_cursor_position = 0;
     int bottom_inst = 0;
     bool continuable;
+
+    int dat_list_start = 1;
   
     // Main loop
     char ch;
@@ -315,6 +317,18 @@ static void curses_loop() {
             break;
           case 'n':
             step = 1;
+            break;
+          case 'j':
+            if (dat_list) {
+                dat_list_start--;
+                wclear(inst_win);
+            }
+            break;
+          case 'k':
+            if (dat_list) {
+                dat_list_start++;
+                wclear(inst_win);
+            }
             break;
           default:
             refresh();
@@ -384,7 +398,7 @@ static void curses_loop() {
             }
 
             if (dat_list) {
-              show_data_memory(inst_win, 1, inst_win_height);
+              show_data_memory(inst_win, dat_list_start, inst_win_height);
             } else {
                 // Display instruction list
                 std::string current_inst = inst_to_string (addr);
@@ -417,7 +431,7 @@ static void curses_loop() {
         
         wrefresh(reg_win);
         wrefresh(inst_win);
-        mvprintw(max_row/2, 2, "Press 'N' to advance / Press 'M' to toggle Memory Map / Press 'Q' to quit");
+        mvprintw(max_row - 2, 2, "Press 'N' to advance / Press 'M' to toggle Memory Map / Press 'Q' to quit");
     }
 
     delwin(reg_win);
