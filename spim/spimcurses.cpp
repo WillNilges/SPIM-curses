@@ -151,6 +151,8 @@ std::string nnbsp(int n);
 /* Handy ncurses variables */
 int max_row, max_col;
 
+int dat_list = 0;
+
 /* => load standard exception handler */
 static bool load_exception_handler = true;
 static int console_state_saved;
@@ -285,18 +287,25 @@ static void curses_loop() {
     refresh();
 
     // Window to be shown on the left
-    int reg_win_y = 1;
-    int reg_win_x = 1;
-    int reg_win_height = 28;
-    int reg_win_width = max_col/2;
-    WINDOW* reg_win = create_newwin(reg_win_height, reg_win_width, reg_win_y, reg_win_x);
+    int     reg_win_y       = 1;
+    int     reg_win_x       = 1;
+    int     reg_win_height  = 28;
+    int     reg_win_width   = max_col/2;
+    WINDOW* reg_win         = create_newwin(reg_win_height, reg_win_width, reg_win_y, reg_win_x);
 
     // Window to be shown on the right
-    int inst_win_y = 1;
-    int inst_win_x = reg_win_width + reg_win_x + 1;
-    int inst_win_height = 28;
-    int inst_win_width = max_col - inst_win_x;
-    WINDOW* inst_win = create_newwin(inst_win_height, inst_win_width, inst_win_y, inst_win_x);
+    int     inst_win_y      = 1;
+    int     inst_win_x      = reg_win_width + reg_win_x + 1;
+    int     inst_win_height = max_row - 2;
+    int     inst_win_width  = max_col - inst_win_x;
+    WINDOW* inst_win        = create_newwin(inst_win_height, inst_win_width, inst_win_y, inst_win_x);
+
+    // Window for the data memory
+    int     data_win_y      = inst_win_y;
+    int     data_win_x      = inst_win_x + 35;
+    int     data_win_height = inst_win_height;
+    int     data_win_width  = inst_win_width - 35;
+    WINDOW* data_win        = create_newwin(data_win_height, data_win_width, data_win_y, data_win_x);
 
     int inst_cursor_position = 0;
     int bottom_inst = 0;
@@ -305,8 +314,19 @@ static void curses_loop() {
     // Main loop
     char ch;
     while((ch = getch()) != 'q'){
-
-        refresh();
+        int step = 0;
+        switch (ch) {
+          case 'm':
+            dat_list = !dat_list;
+            wclear(inst_win);
+            break;
+          case 'n':
+            step = 1;
+            break;
+          default:
+            refresh();
+            break;
+        }
 
         // erase();
     
@@ -335,8 +355,9 @@ static void curses_loop() {
                 return;
             }
             console_to_program();
-            if (run_program (addr, 1, false, false, &continuable))
-            {
+            if(step) {
+              if(run_program (addr, 1, false, false, &continuable))
+              {
                 // write_output (message_out, "Breakpoint encountered at 0x%08x\n", PC);
 
                 delwin(reg_win);
@@ -344,6 +365,7 @@ static void curses_loop() {
                 
                 endwin();
                 return;
+              }
             }
             
             // Dump registers to the screen
@@ -358,6 +380,7 @@ static void curses_loop() {
             mvwprintw(reg_win, 0,1, "Registers");
             wattroff(reg_win, A_BOLD);
 
+            // Instruction list cursor position
             if (inst_cursor_position + 5 > inst_win_height)
             {
                 bottom_inst += 5;
@@ -368,39 +391,49 @@ static void curses_loop() {
                 werase(inst_win);
             }
 
-            //// Display instruction list
-            // std::string current_inst = inst_to_string (addr);
-            // for (int i = bottom_inst; i < bottom_inst + inst_win_height - 1; i++)
-            // {
-            //     if ((long unsigned int) i < inst_dump.size())
-            //     {
-            //         if (current_inst.compare(inst_dump.at(i)) == 0)
-            //         {
-            //             wattron(inst_win, A_REVERSE);
-            //             inst_cursor_position = 1+i-bottom_inst;
-            //         }
-            //         mvwprintw(inst_win, 1+i-bottom_inst, 1, inst_dump.at(i).c_str());
-            //         wattroff(inst_win, A_REVERSE);
-            //     }
-            // }
-
-            show_data_memory(inst_win, 1, inst_win_height);
+            // Display instruction list
+            std::string current_inst = inst_to_string (addr);
+            for (int i = bottom_inst; i < bottom_inst + inst_win_height - 1; i++)
+            {
+                if ((long unsigned int) i < inst_dump.size())
+                {
+                    if (current_inst.compare(inst_dump.at(i)) == 0)
+                    {
+                        wattron(inst_win, A_REVERSE);
+                        inst_cursor_position = 1+i-bottom_inst;
+                    }
+                    mvwprintw(inst_win, 1+i-bottom_inst, 1, inst_dump.at(i).c_str());
+                    wattroff(inst_win, A_REVERSE);
+                }
+            }
             
             box(inst_win, 0 , 0);
             wattron(inst_win, A_BOLD);
             mvwprintw(inst_win, 0,1, "Instructions");
             wattroff(inst_win, A_BOLD);
+
+            box(data_win, 0 , 0);
+            wattron(data_win, A_BOLD);
+            mvwprintw(data_win, 0,1, "Data Memory");
+            wattroff(data_win, A_BOLD);
+
             console_to_spim();
-        }
+          }
         }
         
         wrefresh(reg_win);
         wrefresh(inst_win);
+
+        if (dat_list) {
+            show_data_memory(data_win, data_win_y, data_win_height - 3);
+            wrefresh(data_win);
+        }
+        mvprintw(max_row/2, 2, "Press 'N' to advance / Press 'M' to toggle Memory Map / Press 'Q' to quit");
     }
 
     delwin(reg_win);
     delwin(inst_win);
-    
+    delwin(data_win); 
     endwin();
 }
 
@@ -764,7 +797,6 @@ error (char *fmt, ...)
 #endif
   va_end (args);
 }
-
 
 /* Print the error message then exit. */
 
