@@ -300,6 +300,9 @@ static void curses_loop() {
     int inst_win_width = max_col - inst_win_x;
     WINDOW* inst_win = create_newwin(inst_win_height, inst_win_width, inst_win_y, inst_win_x);
 
+    int inst_start_x = 0;
+    int inst_start_y = 0;
+
     int inst_cursor_position = 0;
     int bottom_inst = 0;
     bool continuable;
@@ -311,25 +314,46 @@ static void curses_loop() {
     while((ch = getch()) != 'q'){
         int step = 0;
         switch (ch) {
-          case 'm':
-            dat_list = !dat_list;
-            wclear(inst_win);
-            break;
-          case 'n':
-            step = 1;
-            break;
-          case 'j':
-            if (dat_list) {
-                dat_list_start--;
+            case 'm':
+                dat_list = !dat_list;
                 wclear(inst_win);
-            }
-            break;
-          case 'k':
-            if (dat_list) {
-                dat_list_start++;
+                break;
+            case 'n':
+                step = 1;
+                break;
+            case 'h':
+                if (!dat_list) {
+                    inst_start_x--;
+
+                    // Doing this results in small graphical glitches while rapidly
+                    // scrolling, but it's necessary to avoid artifacting when scrolling
+                    // beyond the window.
+                    wclear(inst_win);
+                }
+                break;
+            case 'j':
+                if (dat_list) {
+                    dat_list_start--;
+                } else {
+                    inst_start_y--;
+                }
                 wclear(inst_win);
-            }
-            break;
+                break;
+            case 'k':
+                if (dat_list) {
+                    dat_list_start++;
+                } else {
+                    inst_start_y++;
+                }
+                wclear(inst_win);
+                break;
+            case 'l':
+                if (!dat_list) {
+                    inst_start_x++;
+                }
+                wclear(inst_win);
+                break;
+
           default:
             refresh();
             break;
@@ -411,7 +435,7 @@ static void curses_loop() {
                             wattron(inst_win, A_REVERSE);
                             inst_cursor_position = 1+i-bottom_inst;
                         }
-                        mvwprintw(inst_win, 1+i-bottom_inst, 1, inst_dump.at(i).c_str());
+                        mvwprintw(inst_win, 1+i-bottom_inst+inst_start_y, 1+inst_start_x, inst_dump.at(i).c_str());
                         wattroff(inst_win, A_REVERSE);
                     }
                 }
@@ -431,7 +455,7 @@ static void curses_loop() {
         
         wrefresh(reg_win);
         wrefresh(inst_win);
-        mvprintw(max_row - 2, 2, "Press 'N' to advance / Press 'M' to toggle Memory Map / Press 'Q' to quit");
+        mvprintw(max_row - 2, 2, "Press 'N' to advance / Use 'HJKL' to scroll / Press 'M' to toggle Memory Map / Press 'Q' to quit");
     }
 
     delwin(reg_win);
