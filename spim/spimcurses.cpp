@@ -152,6 +152,7 @@ std::string nnbsp(int n);
 int max_row, max_col;
 
 int dat_list = 0;
+int be_vert  = 0;
 
 /* => load standard exception handler */
 static bool load_exception_handler = true;
@@ -284,8 +285,6 @@ static void curses_loop() {
     // Get bounds of display
     getmaxyx(stdscr, max_row, max_col);
     
-    refresh();
-
     // Window to be shown on the left
     int reg_win_y = 1;
     int reg_win_x = 1;
@@ -299,6 +298,7 @@ static void curses_loop() {
     int inst_win_height = max_row - 2;
     int inst_win_width = max_col - inst_win_x;
     WINDOW* inst_win = create_newwin(inst_win_height, inst_win_width, inst_win_y, inst_win_x);
+    scrollok(inst_win, TRUE);
 
     int inst_start_x = 0;
     int inst_start_y = 0;
@@ -308,10 +308,18 @@ static void curses_loop() {
     bool continuable;
 
     int dat_list_start = 1;
+
+    char* begin = "Press any key to begin.";
+    attron(A_BOLD);
+    mvprintw(reg_win_height, inst_win_width/4 - strlen(begin)/2, begin);
+    attroff(A_BOLD);
   
     // Main loop
     char ch;
     while((ch = getch()) != 'q'){
+
+        wclear(reg_win);
+        wclear(inst_win);
         int step = 0;
         switch (ch) {
             case 'm':
@@ -322,7 +330,7 @@ static void curses_loop() {
                 step = 1;
                 break;
             case 'h':
-                if (!dat_list) {
+                if (!dat_list && inst_start_x > 0) {
                     inst_start_x--;
 
                     // Doing this results in small graphical glitches while rapidly
@@ -352,6 +360,10 @@ static void curses_loop() {
                     inst_start_x++;
                 }
                 wclear(inst_win);
+                break;
+
+            case 'v':
+                be_vert = !be_vert;
                 break;
 
           default:
@@ -386,17 +398,18 @@ static void curses_loop() {
                 return;
             }
             console_to_program();
-            if(step) {
-              if(run_program (addr, 1, false, false, &continuable))
-              {
-                // write_output (message_out, "Breakpoint encountered at 0x%08x\n", PC);
+            if(step)
+            {
+                if(run_program (addr, 1, false, false, &continuable))
+                {
+                    // write_output (message_out, "Breakpoint encountered at 0x%08x\n", PC);
 
-                delwin(reg_win);
-                delwin(inst_win);
-                
-                endwin();
-                return;
-              }
+                    delwin(reg_win);
+                    delwin(inst_win);
+                    
+                    endwin();
+                    return;
+                }
             }
             
             // Dump registers to the screen
@@ -411,15 +424,10 @@ static void curses_loop() {
             mvwprintw(reg_win, 0,1, "Registers");
             wattroff(reg_win, A_BOLD);
 
-            if (inst_cursor_position + 5 > inst_win_height)
-            {
-                bottom_inst += 5;
-                werase(inst_win);
-            } else if  (inst_cursor_position < 0)
-            {
-                bottom_inst -= 5;
-                werase(inst_win);
-            }
+            if (inst_cursor_position + 5 > inst_win_height - inst_start_y && ch == 'n')
+                inst_start_y -= 5;
+            else if (inst_cursor_position < 0 && ch == 'n')
+                inst_start_y += 5;
 
             if (dat_list) {
               show_data_memory(inst_win, dat_list_start, inst_win_height);
@@ -435,7 +443,17 @@ static void curses_loop() {
                             wattron(inst_win, A_REVERSE);
                             inst_cursor_position = 1+i-bottom_inst;
                         }
-                        mvwprintw(inst_win, 1+i-bottom_inst+inst_start_y, 1+inst_start_x, inst_dump.at(i).c_str());
+
+                        // To prevent SEGFAULTs while scrolling
+                        int instruction_start = 0;
+                        if (inst_start_x > inst_dump.at(i).length()) {
+                            instruction_start = inst_dump.at(i).length();
+                        } else {
+                            instruction_start = inst_start_x;
+                        }
+
+                        // Print lines
+                        mvwprintw(inst_win, 1+i-bottom_inst+inst_start_y, 1, inst_dump.at(i).substr(instruction_start).c_str());
                         wattroff(inst_win, A_REVERSE);
                     }
                 }
