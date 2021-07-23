@@ -153,6 +153,7 @@ int max_row, max_col;
 
 int dat_list = 0;
 int be_vert  = 0;
+int context = 0;
 
 /* => load standard exception handler */
 static bool load_exception_handler = true;
@@ -288,7 +289,7 @@ static void curses_loop() {
     // Window to be shown on the left
     int reg_win_y = 1;
     int reg_win_x = 1;
-    int reg_win_height = 28;
+    int reg_win_height = max_row - 2;
     int reg_win_width = max_col/2;
     WINDOW* reg_win = create_newwin(reg_win_height, reg_win_width, reg_win_y, reg_win_x);
 
@@ -302,6 +303,9 @@ static void curses_loop() {
 
     int inst_start_x = 0;
     int inst_start_y = 0;
+
+    int reg_start_x = 0;
+    int reg_start_y = 0;
 
     int inst_cursor_position = 0;
     int bottom_inst = 0;
@@ -318,8 +322,10 @@ static void curses_loop() {
     char ch;
     while((ch = getch()) != 'q'){
 
+        // Clearing by default is terrible and stupid and awful.
         wclear(reg_win);
         wclear(inst_win);
+
         int step = 0;
         switch (ch) {
             case 'm':
@@ -336,36 +342,43 @@ static void curses_loop() {
                     // Doing this results in small graphical glitches while rapidly
                     // scrolling, but it's necessary to avoid artifacting when scrolling
                     // beyond the window.
-                    wclear(inst_win);
+                    // wclear(inst_win);
                 }
                 break;
             case 'j':
-                if (dat_list) {
-                    dat_list_start--;
+                if (context) {
+                    reg_start_y--;
                 } else {
-                    inst_start_y--;
+                    if (dat_list) {
+                        dat_list_start--;
+                    } else {
+                        inst_start_y--;
+                    }
                 }
-                wclear(inst_win);
+                // wclear(inst_win);
                 break;
             case 'k':
-                if (dat_list) {
-                    dat_list_start++;
+                if (context) {
+                    reg_start_y++;
                 } else {
-                    inst_start_y++;
+                    if (dat_list) {
+                        dat_list_start++;
+                    } else {
+                        inst_start_y++;
+                    }
                 }
-                wclear(inst_win);
+                // wclear(inst_win);
                 break;
             case 'l':
                 if (!dat_list) {
                     inst_start_x++;
                 }
-                wclear(inst_win);
+                // wclear(inst_win);
                 break;
 
-            case 'v':
-                be_vert = !be_vert;
+            case 'c':
+                context = !context;
                 break;
-
           default:
             refresh();
             break;
@@ -416,12 +429,16 @@ static void curses_loop() {
             static str_stream ss;
             int hex_flag = 1;
             ss_clear (&ss);
-            format_registers (&ss, hex_flag, hex_flag);
-            mvwprintw(reg_win, 1, 0, ss_to_string (&ss)); // ez
+            format_registers(&ss, hex_flag, hex_flag);
+
+            mvwprintw(reg_win, 1 + reg_start_y, 0, ss_to_string(&ss)); // ez
             box(reg_win, 0 , 0);
 
             wattron(reg_win, A_BOLD);
-            mvwprintw(reg_win, 0,1, "Registers");
+            if (context)
+                mvwprintw(reg_win, 0,1, "[Registers]");
+            else
+                mvwprintw(reg_win, 0,1, "Registers");
             wattroff(reg_win, A_BOLD);
 
             if (inst_cursor_position + 5 > inst_win_height - inst_start_y && ch == 'n')
@@ -444,7 +461,7 @@ static void curses_loop() {
                             inst_cursor_position = 1+i-bottom_inst;
                         }
 
-                        // To prevent SEGFAULTs while scrolling
+                        // To prevent SEGFAULTs while scrolling :)
                         int instruction_start = 0;
                         if (inst_start_x > inst_dump.at(i).length()) {
                             instruction_start = inst_dump.at(i).length();
@@ -461,10 +478,18 @@ static void curses_loop() {
             
             box(inst_win, 0 , 0);
             wattron(inst_win, A_BOLD);
-            if (dat_list) {
-                mvwprintw(inst_win, 0,1, "Data Memory");
+            if (!context) {
+                if (dat_list) {
+                    mvwprintw(inst_win, 0,1, "[Data Memory]");
+                } else {
+                    mvwprintw(inst_win, 0,1, "[Instructions]");
+                }
             } else {
-                mvwprintw(inst_win, 0,1, "Instructions");
+                if (dat_list) {
+                    mvwprintw(inst_win, 0,1, "Data Memory");
+                } else {
+                    mvwprintw(inst_win, 0,1, "Instructions");
+                }
             }
             wattroff(inst_win, A_BOLD);
             console_to_spim();
@@ -473,7 +498,9 @@ static void curses_loop() {
         
         wrefresh(reg_win);
         wrefresh(inst_win);
-        mvprintw(max_row - 2, 2, "Press 'N' to advance / Use 'HJKL' to scroll / Press 'M' to toggle Memory Map / Press 'Q' to quit");
+        mvprintw(max_row - 5, 2, "Press 'N' to advance / Use 'HJKL' to scroll");
+        mvprintw(max_row - 4, 2, "Press 'M' to toggle Memory Map / Press 'C' to switch windows");
+        mvprintw(max_row - 3, 2, "Press 'Q' to quit");
     }
 
     delwin(reg_win);
@@ -488,8 +515,8 @@ WINDOW* create_newwin(int height, int width, int starty, int startx)
 
 	local_win = newwin(height, width, starty, startx);
 	box(local_win, 0 , 0);		/* 0, 0 gives default characters 
-					 * for the vertical and horizontal
-					 * lines			*/
+                                 * for the vertical and horizontal
+                                 * lines			*/
 	wrefresh(local_win);		/* Show that box 		*/
 
 	return local_win;
