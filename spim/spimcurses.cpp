@@ -139,6 +139,7 @@ std::string formatPartialQuadWord(mem_addr from, mem_addr to);
 std::string formatAsChars(mem_addr from, mem_addr to);
 std::string rightJustified(std::string input, int width, char padding);
 void show_data_memory(WINDOW* target_window, int start_line, int target_height);
+void show_registers(WINDOW* target_window, int start_line, int target_height);
 
 // Format SPIM abstractions for display
 //
@@ -290,7 +291,7 @@ static void curses_loop() {
     int reg_win_y = 1;
     int reg_win_x = 1;
     int reg_win_height = max_row - 2;
-    int reg_win_width = max_col/2;
+    int reg_win_width = 36;
     WINDOW* reg_win = create_newwin(reg_win_height, reg_win_width, reg_win_y, reg_win_x);
 
     // Window to be shown on the right
@@ -300,6 +301,7 @@ static void curses_loop() {
     int inst_win_width = max_col - inst_win_x;
     WINDOW* inst_win = create_newwin(inst_win_height, inst_win_width, inst_win_y, inst_win_x);
     scrollok(inst_win, TRUE);
+    // scrollok(reg_win, TRUE);
 
     int inst_start_x = 0;
     int inst_start_y = 0;
@@ -312,6 +314,7 @@ static void curses_loop() {
     bool continuable;
 
     int dat_list_start = 1;
+    int reg_list_start = 1;
 
     char* begin = "Press any key to begin.";
     attron(A_BOLD);
@@ -426,12 +429,13 @@ static void curses_loop() {
             }
             
             // Dump registers to the screen
-            static str_stream ss;
-            int hex_flag = 1;
-            ss_clear (&ss);
-            format_registers(&ss, hex_flag, hex_flag);
+            // static str_stream ss;
+            // int hex_flag = 1;
+            // ss_clear (&ss);
+            // format_registers(&ss, hex_flag, hex_flag);
+            show_registers(reg_win, reg_start_y, inst_win_height);
 
-            mvwprintw(reg_win, 1 + reg_start_y, 0, ss_to_string(&ss)); // ez
+            // mvwprintw(reg_win, 1 + reg_start_y, 0, ss_to_string(&ss)); // ez
             box(reg_win, 0 , 0);
 
             wattron(reg_win, A_BOLD);
@@ -562,6 +566,32 @@ void show_data_memory(WINDOW* target_window, int start_line, int target_height)
     {
         std::string mem_line;
         getline(mem_map_stream, mem_line);
+
+        // Bold the titles of each section of memory
+        if (mem_line.find("Kernel data segment") != std::string::npos ||
+            mem_line.find("User Stack")          != std::string::npos ||
+            mem_line.find("User data segment")   != std::string::npos)
+            wattron(target_window, A_BOLD);
+            
+        mvwprintw(target_window, line, 1, mem_line.c_str());
+        wattroff(target_window, A_BOLD);
+        line++;
+    }
+}
+
+// Display Registers
+void show_registers(WINDOW* target_window, int start_line, int target_height)
+{
+    int line = start_line;
+    static str_stream ss;
+    int hex_flag = 1;
+    ss_clear (&ss);
+    format_registers(&ss, hex_flag, hex_flag);
+    std::istringstream registers_stream(ss_to_string(&ss));
+    while (!registers_stream.eof() || line < target_height)
+    {
+        std::string mem_line;
+        getline(registers_stream, mem_line);
 
         // Bold the titles of each section of memory
         if (mem_line.find("Kernel data segment") != std::string::npos ||
