@@ -95,7 +95,7 @@ format_registers (str_stream *ss, int print_gpr_hex, int print_fpr_hex)
   ss_printf (ss, "\n\n  FIR    = %08x", FIR);
   ss_printf (ss, "\n  FCSR   = %08x", FCSR);
 
-  ss_printf (ss, "\n\n  Double Floating Point Registers\n  ----------\n");
+  ss_printf (ss, "\n\n  Double Floating\n  Point Registers\n  ----------\n");
 
   if (print_fpr_hex)
     fpstr = "  FP%-2d = %08x,%08x", fpfill = "\n";
@@ -142,7 +142,7 @@ format_registers (str_stream *ss, int print_gpr_hex, int print_fpr_hex)
   else
     fpstr = " FP%-2d = %#-13.6g", fpfill = " ";
 
-  ss_printf (ss, "\n  Single Floating Point Registers\n  ----------\n ");
+  ss_printf (ss, "\n  Single Floating\n  Point Registers\n  ----------\n ");
 
   if (print_fpr_hex)
     for (i = 0; i < 32; i += 1)

@@ -154,7 +154,15 @@ int max_row, max_col;
 
 int dat_list = 0;
 int be_vert  = 0;
-int context = 0;
+
+typedef enum PaneContext {
+  REGISTERS,
+  INSTRUCTIONS,
+  DATA,
+  INVALID
+} PaneContext;
+
+PaneContext context = INSTRUCTIONS;
 
 /* => load standard exception handler */
 static bool load_exception_handler = true;
@@ -233,6 +241,11 @@ int main(int argc, char **argv)
         exit(99);
     }
   }
+  if (help)
+  {
+    fprintf(stderr, "You fool, there is no help here.\n");
+    exit(1);
+  }
 
     // int i;
     // bool assembly_file_loaded = false;
@@ -270,7 +283,7 @@ int main(int argc, char **argv)
 }
 
 // God help me.
-static void curses_loop() {	
+static void curses_loop() {
     static int steps;
     mem_addr addr;
     // bool redo = false;
@@ -287,18 +300,21 @@ static void curses_loop() {
     // Get bounds of display
     getmaxyx(stdscr, max_row, max_col);
     
-    // Window to be shown on the left
+    // == REGISTER PANE ==
     int reg_win_y = 1;
     int reg_win_x = 1;
     int reg_win_height = max_row - 2;
-    int reg_win_width = 36;
+    int reg_win_width = 29;
     WINDOW* reg_win = create_newwin(reg_win_height, reg_win_width, reg_win_y, reg_win_x);
 
-    // Window to be shown on the right
+    // int reg_start_x = 0;
+    int reg_start_y = 1;
+
+    // == INSTRUCTION PANE ==
     int inst_win_y = 1;
     int inst_win_x = reg_win_width + reg_win_x + 1;
     int inst_win_height = max_row - 2;
-    int inst_win_width = max_col - inst_win_x;
+    int inst_win_width = max_col/2 - inst_win_width; // I want to dedicate half of the remaining screen to the instruction window
     WINDOW* inst_win = create_newwin(inst_win_height, inst_win_width, inst_win_y, inst_win_x);
     scrollok(inst_win, TRUE);
     // scrollok(reg_win, TRUE);
@@ -306,15 +322,20 @@ static void curses_loop() {
     int inst_start_x = 0;
     int inst_start_y = 0;
 
-    int reg_start_x = 0;
-    int reg_start_y = 0;
-
     int inst_cursor_position = 0;
     int bottom_inst = 0;
     bool continuable;
 
+    // == DATA PANE ==
+    int data_win_y = 1;
+    int data_win_x = reg_win_width + reg_win_x + inst_win_width + 1;
+    int data_win_height = max_row - 2;
+    int data_win_width = max_col - data_win_x - 1;
+    WINDOW* data_win = create_newwin(data_win_height, data_win_width, data_win_y, data_win_x);
+    scrollok(data_win, TRUE);
+
     int dat_list_start = 1;
-    int reg_list_start = 1;
+    // int reg_list_start = 1;
 
     char* begin = "Press any key to begin.";
     attron(A_BOLD);
@@ -326,20 +347,19 @@ static void curses_loop() {
     while((ch = getch()) != 'q'){
 
         // Clearing by default is terrible and stupid and awful.
+        // Shitty hack to "lessen" artifacting.
         wclear(reg_win);
         wclear(inst_win);
+        wclear(data_win);
 
         int step = 0;
         switch (ch) {
-            case 'm':
-                dat_list = !dat_list;
-                wclear(inst_win);
-                break;
             case 'n':
                 step = 1;
                 break;
             case 'h':
-                if (!dat_list && inst_start_x > 0) {
+                // TODO: WTF?
+                if (context != DATA && inst_start_x > 0) {
                     inst_start_x--;
 
                     // Doing this results in small graphical glitches while rapidly
@@ -349,38 +369,75 @@ static void curses_loop() {
                 }
                 break;
             case 'j':
-                if (context) {
-                    reg_start_y--;
-                } else {
-                    if (dat_list) {
+                switch (context)
+                {
+                    case REGISTERS:
+                        reg_start_y--;
+                        break;
+                    case DATA:
                         dat_list_start--;
-                    } else {
+                        break;
+                    case INSTRUCTIONS:
                         inst_start_y--;
-                    }
+                        break;
+                    default:
+                        break;
                 }
-                // wclear(inst_win);
                 break;
             case 'k':
-                if (context) {
-                    reg_start_y++;
-                } else {
-                    if (dat_list) {
+                switch (context)
+                {
+                    case REGISTERS:
+                        reg_start_y++;
+                        break;
+                    case DATA:
                         dat_list_start++;
-                    } else {
+                        break;
+                    case INSTRUCTIONS:
                         inst_start_y++;
-                    }
+                        break;
+                    default:
+                        break;
                 }
-                // wclear(inst_win);
                 break;
             case 'l':
-                if (!dat_list) {
+                // TODO: Horizontal scrolling on Data?
+                if (context != DATA) {
                     inst_start_x++;
                 }
                 // wclear(inst_win);
                 break;
 
+            // Switch between panes (both c and Shift-C)
             case 'c':
-                context = !context;
+                switch (context)
+                {
+                    // Look away, kids!
+                    case REGISTERS:
+                        context = INSTRUCTIONS;
+                        break;
+                    case INSTRUCTIONS:
+                        context = DATA;
+                        break;
+                    case DATA:
+                        context = REGISTERS;
+                        break;
+                }
+                break;
+            case 'C':
+                switch (context)
+                {
+                    // Look away, kids!
+                    case REGISTERS:
+                        context = DATA;
+                        break;
+                    case INSTRUCTIONS:
+                        context = REGISTERS;
+                        break;
+                    case DATA:
+                        context = INSTRUCTIONS;
+                        break;
+                }
                 break;
           default:
             refresh();
@@ -395,65 +452,51 @@ static void curses_loop() {
 
         // Okay what the actual fuck...
         if (!setjmp (spim_top_level_env)) {
-        if (steps == 0)
-            steps = 1;
-        if (addr != 0)
-        {
-            char *undefs = undefined_symbol_string ();
-            if (undefs != NULL)
+            if (steps == 0)
+                steps = 1;
+            if (addr != 0)
             {
-                write_output (message_out, "The following symbols are undefined:\n");
-                write_output (message_out, undefs);
-                write_output (message_out, "\n");
-                free (undefs);
-                
-                delwin(reg_win);
-                delwin(inst_win);
-                
-                endwin();
-                return;
-            }
-            console_to_program();
-            if(step)
-            {
-                if(run_program (addr, 1, false, false, &continuable))
+                char *undefs = undefined_symbol_string ();
+                if (undefs != NULL)
                 {
-                    // write_output (message_out, "Breakpoint encountered at 0x%08x\n", PC);
-
+                    write_output (message_out, "The following symbols are undefined:\n");
+                    write_output (message_out, undefs);
+                    write_output (message_out, "\n");
+                    free (undefs);
+                    
                     delwin(reg_win);
                     delwin(inst_win);
                     
                     endwin();
                     return;
                 }
-            }
-            
-            // Dump registers to the screen
-            // static str_stream ss;
-            // int hex_flag = 1;
-            // ss_clear (&ss);
-            // format_registers(&ss, hex_flag, hex_flag);
-            show_registers(reg_win, reg_start_y, inst_win_height);
+                console_to_program();
+                if(step)
+                {
+                    if(run_program (addr, 1, false, false, &continuable))
+                    {
+                        // write_output (message_out, "Breakpoint encountered at 0x%08x\n", PC);
 
-            // mvwprintw(reg_win, 1 + reg_start_y, 0, ss_to_string(&ss)); // ez
-            box(reg_win, 0 , 0);
+                        delwin(reg_win);
+                        delwin(inst_win);
+                        
+                        endwin();
+                        return;
+                    }
+                }
+                
+                // Dump registers to the screen
+                show_registers(reg_win, reg_start_y, inst_win_height);
 
-            wattron(reg_win, A_BOLD);
-            if (context)
-                mvwprintw(reg_win, 0,1, "[Registers]");
-            else
-                mvwprintw(reg_win, 0,1, "Registers");
-            wattroff(reg_win, A_BOLD);
+                if (inst_cursor_position + 5 > inst_win_height - inst_start_y && ch == 'n')
+                    inst_start_y -= 5;
+                else if (inst_cursor_position < 0 && ch == 'n')
+                    inst_start_y += 5;
 
-            if (inst_cursor_position + 5 > inst_win_height - inst_start_y && ch == 'n')
-                inst_start_y -= 5;
-            else if (inst_cursor_position < 0 && ch == 'n')
-                inst_start_y += 5;
-
-            if (dat_list) {
-              show_data_memory(inst_win, dat_list_start, inst_win_height);
-            } else {
+                show_data_memory(data_win, dat_list_start, inst_win_height);
                 // Display instruction list
+                // TODO: Why are the lines glitching at the bottom? Is it linewrap?
+                // TODO: IDK maybe it's some dumb shit with this: https://www.ibm.com/docs/en/aix/7.2?topic=c-clearok-idlok-leaveok-scrollok-setscrreg-wsetscrreg-subroutine
                 std::string current_inst = inst_to_string (addr);
                 for (int i = bottom_inst; i < bottom_inst + inst_win_height - 1; i++)
                 {
@@ -467,9 +510,12 @@ static void curses_loop() {
 
                         // To prevent SEGFAULTs while scrolling :)
                         int instruction_start = 0;
-                        if (inst_start_x > inst_dump.at(i).length()) {
+                        if (inst_start_x > inst_dump.at(i).length())
+                        {
                             instruction_start = inst_dump.at(i).length();
-                        } else {
+                        } 
+                        else
+                        {
                             instruction_start = inst_start_x;
                         }
 
@@ -478,33 +524,36 @@ static void curses_loop() {
                         wattroff(inst_win, A_REVERSE);
                     }
                 }
+                
+                // Box and label the panes.
+                const char* label;
+
+                //TODO?: void label_win(WINDOW* target_window, PaneContext context, char* base_label);
+                box(reg_win, 0 , 0);
+                wattron(reg_win, A_BOLD);
+                label = context == REGISTERS ? "[Registers]" : "Registers";
+                mvwprintw(reg_win, 0,1, label);
+                wattroff(reg_win, A_BOLD);
+
+                box(inst_win, 0, 0);
+                wattron(inst_win, A_BOLD);
+                label = context == INSTRUCTIONS ? "[Instructions]" : "Instructions";
+                mvwprintw(inst_win, 0,1, label);
+                wattroff(inst_win, A_BOLD);
+
+                box(data_win, 0, 0);
+                wattron(data_win, A_BOLD);
+                label = context == DATA ? "[Data Memory]" : "Data Memory";
+                mvwprintw(data_win, 0,1, label);
+                wattroff(data_win, A_BOLD);
+                console_to_spim();
             }
-            
-            box(inst_win, 0 , 0);
-            wattron(inst_win, A_BOLD);
-            if (!context) {
-                if (dat_list) {
-                    mvwprintw(inst_win, 0,1, "[Data Memory]");
-                } else {
-                    mvwprintw(inst_win, 0,1, "[Instructions]");
-                }
-            } else {
-                if (dat_list) {
-                    mvwprintw(inst_win, 0,1, "Data Memory");
-                } else {
-                    mvwprintw(inst_win, 0,1, "Instructions");
-                }
-            }
-            wattroff(inst_win, A_BOLD);
-            console_to_spim();
-          }
         }
         
         wrefresh(reg_win);
         wrefresh(inst_win);
-        mvprintw(max_row - 5, 2, "Press 'N' to advance / Use 'HJKL' to scroll");
-        mvprintw(max_row - 4, 2, "Press 'M' to toggle Memory Map / Press 'C' to switch windows");
-        mvprintw(max_row - 3, 2, "Press 'Q' to quit");
+        wrefresh(data_win);
+        mvprintw(max_row - 1, 2, "Press 'N' to advance / Use 'HJKL' to scroll / Press 'C' to switch windows / Press 'Q' to quit");
     }
 
     delwin(reg_win);
@@ -557,7 +606,6 @@ std::vector<std::string> dump_instructions(mem_addr addr)
     return instruction_list;
 }
 
-// Display memory map
 void show_data_memory(WINDOW* target_window, int start_line, int target_height)
 {
     int line = start_line;
@@ -579,7 +627,6 @@ void show_data_memory(WINDOW* target_window, int start_line, int target_height)
     }
 }
 
-// Display Registers
 void show_registers(WINDOW* target_window, int start_line, int target_height)
 {
     int line = start_line;
@@ -591,14 +638,7 @@ void show_registers(WINDOW* target_window, int start_line, int target_height)
     while (!registers_stream.eof() || line < target_height)
     {
         std::string mem_line;
-        getline(registers_stream, mem_line);
-
-        // Bold the titles of each section of memory
-        if (mem_line.find("Kernel data segment") != std::string::npos ||
-            mem_line.find("User Stack")          != std::string::npos ||
-            mem_line.find("User data segment")   != std::string::npos)
-            wattron(target_window, A_BOLD);
-            
+        getline(registers_stream, mem_line);            
         mvwprintw(target_window, line, 1, mem_line.c_str());
         wattroff(target_window, A_BOLD);
         line++;
@@ -606,7 +646,7 @@ void show_registers(WINDOW* target_window, int start_line, int target_height)
 }
 
 //
-// Data segment window
+// Code for assembling the contents of the data pane.
 //
 
 std::string displayDataSegments()
