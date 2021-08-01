@@ -139,6 +139,7 @@ std::string formatPartialQuadWord(mem_addr from, mem_addr to);
 std::string formatAsChars(mem_addr from, mem_addr to);
 std::string rightJustified(std::string input, int width, char padding);
 void show_data_memory(WINDOW* target_window, int start_line, int target_height);
+void show_user_stack(WINDOW* target_window, int start_line, int target_height);
 void show_registers(WINDOW* target_window, int start_line, int target_height);
 
 // Format SPIM abstractions for display
@@ -159,6 +160,7 @@ typedef enum PaneContext {
   REGISTERS,
   INSTRUCTIONS,
   DATA,
+  STACK,
   INVALID
 } PaneContext;
 
@@ -329,7 +331,7 @@ static void curses_loop() {
     // == DATA PANE ==
     int data_win_y = 1;
     int data_win_x = reg_win_width + reg_win_x + inst_win_width + 1;
-    int data_win_height = max_row - 2;
+    int data_win_height = max_row * 0.66 - 2;
     int data_win_width = max_col - data_win_x - 1;
     WINDOW* data_win = create_newwin(data_win_height, data_win_width, data_win_y, data_win_x);
     scrollok(data_win, TRUE);
@@ -337,9 +339,21 @@ static void curses_loop() {
     int dat_list_start = 1;
     // int reg_list_start = 1;
 
+
+    // == STACK PANE ==
+    int stack_win_y = max_row * 0.66 - 1;
+    int stack_win_x = reg_win_width + reg_win_x + inst_win_width + 1;
+    int stack_win_height = max_row * 0.33q;
+    int stack_win_width = max_col - stack_win_x - 1;
+    WINDOW* stack_win = create_newwin(stack_win_height, stack_win_width, stack_win_y, stack_win_x);
+    scrollok(stack_win, TRUE);
+
+    int stk_list_start = 1;
+    // int reg_list_start = 1;
+
     char* begin = "Press any key to begin.";
     attron(A_BOLD);
-    mvprintw(reg_win_height, inst_win_width/4 - strlen(begin)/2, begin);
+    mvprintw(max_row/2, max_col/2 - strlen(begin)/2, begin);
     attroff(A_BOLD);
   
     // Main loop
@@ -351,6 +365,7 @@ static void curses_loop() {
         wclear(reg_win);
         wclear(inst_win);
         wclear(data_win);
+        wclear(stack_win);
 
         int step = 0;
         switch (ch) {
@@ -377,6 +392,9 @@ static void curses_loop() {
                     case DATA:
                         dat_list_start--;
                         break;
+                    case STACK:
+                        stk_list_start--;
+                        break;
                     case INSTRUCTIONS:
                         inst_start_y--;
                         break;
@@ -392,6 +410,9 @@ static void curses_loop() {
                         break;
                     case DATA:
                         dat_list_start++;
+                        break;
+                    case STACK:
+                        stk_list_start++;
                         break;
                     case INSTRUCTIONS:
                         inst_start_y++;
@@ -420,6 +441,9 @@ static void curses_loop() {
                         context = DATA;
                         break;
                     case DATA:
+                        context = STACK;
+                        break;
+                    case STACK:
                         context = REGISTERS;
                         break;
                 }
@@ -429,7 +453,7 @@ static void curses_loop() {
                 {
                     // Look away, kids!
                     case REGISTERS:
-                        context = DATA;
+                        context = STACK;
                         break;
                     case INSTRUCTIONS:
                         context = REGISTERS;
@@ -437,14 +461,15 @@ static void curses_loop() {
                     case DATA:
                         context = INSTRUCTIONS;
                         break;
+                    case STACK:
+                        context = DATA;
+                        break;
                 }
                 break;
           default:
             refresh();
             break;
         }
-
-        // erase();
     
         // A hideous implementation of the "step" code
         // steps = (redo ? steps : get_opt_int ());
@@ -493,7 +518,10 @@ static void curses_loop() {
                 else if (inst_cursor_position < 0 && ch == 'n')
                     inst_start_y += 5;
 
-                show_data_memory(data_win, dat_list_start, inst_win_height);
+                show_data_memory(data_win, dat_list_start, data_win_height);
+
+                show_user_stack(stack_win, stk_list_start, stack_win_height);
+                
                 // Display instruction list
                 // TODO: Why are the lines glitching at the bottom? Is it linewrap?
                 // TODO: IDK maybe it's some dumb shit with this: https://www.ibm.com/docs/en/aix/7.2?topic=c-clearok-idlok-leaveok-scrollok-setscrreg-wsetscrreg-subroutine
@@ -511,13 +539,9 @@ static void curses_loop() {
                         // To prevent SEGFAULTs while scrolling :)
                         int instruction_start = 0;
                         if (inst_start_x > inst_dump.at(i).length())
-                        {
                             instruction_start = inst_dump.at(i).length();
-                        } 
                         else
-                        {
                             instruction_start = inst_start_x;
-                        }
 
                         // Print lines
                         mvwprintw(inst_win, 1+i-bottom_inst+inst_start_y, 1, inst_dump.at(i).substr(instruction_start).c_str());
@@ -547,17 +571,28 @@ static void curses_loop() {
                 mvwprintw(data_win, 0,1, label);
                 wattroff(data_win, A_BOLD);
                 console_to_spim();
+
+                box(stack_win, 0, 0);
+                wattron(stack_win, A_BOLD);
+                label = context == STACK ? "[Stack Memory]" : "Stack Memory";
+                mvwprintw(stack_win, 0,1, label);
+                wattroff(stack_win, A_BOLD);
+                console_to_spim();
             }
         }
         
         wrefresh(reg_win);
         wrefresh(inst_win);
         wrefresh(data_win);
+        wrefresh(stack_win);
+
         mvprintw(max_row - 1, 2, "Press 'N' to advance / Use 'HJKL' to scroll / Press 'C' to switch windows / Press 'Q' to quit");
     }
 
     delwin(reg_win);
     delwin(inst_win);
+    delwin(data_win);
+    delwin(stack_win);
     
     endwin();
 }
@@ -627,6 +662,20 @@ void show_data_memory(WINDOW* target_window, int start_line, int target_height)
     }
 }
 
+void show_user_stack(WINDOW* target_window, int start_line, int target_height)
+{
+    int line = start_line;
+    std::istringstream stack_stream(formatUserStack());
+    while (!stack_stream.eof() || line < target_height)
+    {
+        std::string mem_line;
+        getline(stack_stream, mem_line);            
+        mvwprintw(target_window, line, 1, mem_line.c_str());
+        wattroff(target_window, A_BOLD);
+        line++;
+    }
+}
+
 void show_registers(WINDOW* target_window, int start_line, int target_height)
 {
     int line = start_line;
@@ -652,7 +701,7 @@ void show_registers(WINDOW* target_window, int start_line, int target_height)
 std::string displayDataSegments()
 {
     std::string window_contents;
-    window_contents += formatUserDataSeg() + formatUserStack() + formatKernelDataSeg();
+    window_contents += formatUserDataSeg() + formatKernelDataSeg();
     return window_contents;
 }
 
