@@ -43,6 +43,7 @@
 #include <string>
 #include <vector>
 #include <getopt.h>
+#include <fstream>
 
 #include <sstream>
 #include <cstdint>
@@ -111,6 +112,7 @@ bool quiet;			/* => no warning messages */
 bool assemble;			/* => assemble, write to stdout and exit */
 char *exception_file_name = DEFAULT_EXCEPTION_HANDLER;
 port message_out, console_out, console_in;
+str_stream console_logs;
 bool mapped_io;			/* => activate memory-mapped IO */
 int pipe_out;
 int spim_return_value;		/* Value returned when spim exits */
@@ -141,6 +143,7 @@ std::string rightJustified(std::string input, int width, char padding);
 void show_data_memory(WINDOW* target_window, int start_line, int target_height);
 void show_user_stack(WINDOW* target_window, int start_line, int target_height);
 void show_registers(WINDOW* target_window, int start_line, int target_height);
+void show_log(WINDOW* target_window, int start_line, int target_height);
 
 // Format SPIM abstractions for display
 //
@@ -161,6 +164,8 @@ typedef enum PaneContext {
   INSTRUCTIONS,
   DATA,
   STACK,
+  OUTPUT,
+  LOG,
   INVALID
 } PaneContext;
 
@@ -315,7 +320,7 @@ static void curses_loop() {
     // == INSTRUCTION PANE ==
     int inst_win_y = 1;
     int inst_win_x = reg_win_width + reg_win_x + 1;
-    int inst_win_height = max_row - 2;
+    int inst_win_height = max_row * 0.8 - 2;
     int inst_win_width = max_col/2 - inst_win_width; // I want to dedicate half of the remaining screen to the instruction window
     WINDOW* inst_win = create_newwin(inst_win_height, inst_win_width, inst_win_y, inst_win_x);
     scrollok(inst_win, TRUE);
@@ -343,12 +348,36 @@ static void curses_loop() {
     // == STACK PANE ==
     int stack_win_y = max_row * 0.66 - 1;
     int stack_win_x = reg_win_width + reg_win_x + inst_win_width + 1;
-    int stack_win_height = max_row * 0.33q;
+    int stack_win_height = max_row * 0.33;
     int stack_win_width = max_col - stack_win_x - 1;
     WINDOW* stack_win = create_newwin(stack_win_height, stack_win_width, stack_win_y, stack_win_x);
     scrollok(stack_win, TRUE);
 
     int stk_list_start = 1;
+    // int reg_list_start = 1;
+
+
+    // == OUTPUT PANE ==
+    int output_win_y = max_row * 0.8 - 1;
+    int output_win_x = inst_win_x;
+    int output_win_height = max_row * 0.2;
+    int output_win_width = inst_win_width / 2;
+    WINDOW* output_win = create_newwin(output_win_height, output_win_width, output_win_y, output_win_x);
+    scrollok(output_win, TRUE);
+
+    int out_list_start = 1;
+    // int reg_list_start = 1;
+
+
+    // == LOG PANE ==
+    int log_win_y = max_row * 0.8 - 1;
+    int log_win_x = output_win_x + output_win_width;
+    int log_win_height = max_row * 0.2;
+    int log_win_width = inst_win_width / 2;
+    WINDOW* log_win = create_newwin(log_win_height, log_win_width, log_win_y, log_win_x);
+    scrollok(log_win, TRUE);
+
+    int log_list_start = 1;
     // int reg_list_start = 1;
 
     char* begin = "Press any key to begin.";
@@ -366,6 +395,7 @@ static void curses_loop() {
         wclear(inst_win);
         wclear(data_win);
         wclear(stack_win);
+        wclear(log_win);
 
         int step = 0;
         switch (ch) {
@@ -548,6 +578,8 @@ static void curses_loop() {
                         wattroff(inst_win, A_REVERSE);
                     }
                 }
+
+                show_log(log_win, log_list_start, log_win_height);
                 
                 // Box and label the panes.
                 const char* label;
@@ -578,6 +610,20 @@ static void curses_loop() {
                 mvwprintw(stack_win, 0,1, label);
                 wattroff(stack_win, A_BOLD);
                 console_to_spim();
+
+                box(output_win, 0, 0);
+                wattron(output_win, A_BOLD);
+                label = context == OUTPUT ? "[Output]" : "Output";
+                mvwprintw(output_win, 0,1, label);
+                wattroff(output_win, A_BOLD);
+                console_to_spim();
+
+                box(log_win, 0, 0);
+                wattron(log_win, A_BOLD);
+                label = context == LOG ? "[Log]" : "Log";
+                mvwprintw(log_win, 0,1, label);
+                wattroff(log_win, A_BOLD);
+                console_to_spim();
             }
         }
         
@@ -585,6 +631,8 @@ static void curses_loop() {
         wrefresh(inst_win);
         wrefresh(data_win);
         wrefresh(stack_win);
+        wrefresh(output_win);
+        wrefresh(log_win);
 
         mvprintw(max_row - 1, 2, "Press 'N' to advance / Use 'HJKL' to scroll / Press 'C' to switch windows / Press 'Q' to quit");
     }
@@ -593,7 +641,9 @@ static void curses_loop() {
     delwin(inst_win);
     delwin(data_win);
     delwin(stack_win);
-    
+    delwin(output_win);
+    delwin(log_win);
+
     endwin();
 }
 
@@ -689,8 +739,23 @@ void show_registers(WINDOW* target_window, int start_line, int target_height)
         std::string mem_line;
         getline(registers_stream, mem_line);            
         mvwprintw(target_window, line, 1, mem_line.c_str());
-        wattroff(target_window, A_BOLD);
         line++;
+    }
+}
+
+void show_log(WINDOW* target_window, int start_line, int target_height)
+{
+    int line = start_line;
+    std::string log_line;
+    // FILE* f = fopen("Logs.txt", "r");
+    // std::ifstream is("Logs.txt");
+    std::istringstream log_stream(ss_to_string(&console_logs));
+    while (!log_stream.eof() || line < target_height)
+    {
+      std::string log_line;
+      getline(log_stream, log_line);            
+      mvwprintw(target_window, line, 1, log_line.c_str());
+      line++;
     }
 }
 
@@ -1051,40 +1116,50 @@ void
 write_output (port fp, char *fmt, ...)
 {
   va_list args;
-  FILE *f;
-  int restore_console_to_program = 0;
+//   // FILE *f;
+//   int restore_console_to_program = 0;
 
   va_start (args, fmt);
-  f = fp.f;
+  ss_printf(&console_logs, fmt, args);
 
-  if (console_state_saved)
-    {
-      restore_console_to_program = 1;
-      console_to_spim ();
-    }
+// //   f = fp.f;
 
-  if (f != 0)
-    {
-#ifdef NEED_VFPRINTF
-      _doprnt (fmt, args, f);
-#else
-      vfprintf (f, fmt, args);
-#endif
-      fflush (f);
-    }
-  else
-    {
-#ifdef NEED_VFPRINTF
-      _doprnt (fmt, args, stdout);
-#else
-      vfprintf (stdout, fmt, args);
-#endif
-      fflush (stdout);
-    }
+//   // f = fopen("Logs.txt", "w");
+//   char* f;
+
+//   if (console_state_saved)
+//   {
+//     restore_console_to_program = 1;
+//     console_to_spim ();
+//   }
+
+//   // vsprintf (f, fmt, args); // lol fuck.
+
+//   console_logs >> fmt >> args;
+
+// //   if (f != 0)
+// //     {
+// // #ifdef NEED_VFPRINTF
+// //       _doprnt (fmt, args, f);
+// // #else
+// //       vsprintf (f, fmt, args);
+// // #endif
+// //       fflush (f);
+// //     }
+// //   else
+// //     {
+// // #ifdef NEED_VFPRINTF
+// //       _doprnt (fmt, args, stdout);
+// // #else
+// //       vsprintf (stdout, fmt, args);
+// // #endif
+// //       fflush (stdout);
+// //     }
   va_end (args);
 
-  if (restore_console_to_program)
-    console_to_program ();
+//   if (restore_console_to_program)
+//     console_to_program ();
+//   console_logs >> f;
 }
 
 
