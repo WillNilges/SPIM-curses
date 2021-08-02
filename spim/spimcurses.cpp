@@ -112,7 +112,6 @@ bool quiet;			/* => no warning messages */
 bool assemble;			/* => assemble, write to stdout and exit */
 char *exception_file_name = DEFAULT_EXCEPTION_HANDLER;
 port message_out, console_out, console_in;
-str_stream console_logs;
 bool mapped_io;			/* => activate memory-mapped IO */
 int pipe_out;
 int spim_return_value;		/* Value returned when spim exits */
@@ -748,12 +747,9 @@ void show_log(WINDOW* target_window, int start_line, int target_height)
     int line = start_line;
     std::string log_line;
     // FILE* f = fopen("Logs.txt", "r");
-    // std::ifstream is("Logs.txt");
-    std::istringstream log_stream(ss_to_string(&console_logs));
-    while (!log_stream.eof() || line < target_height)
+    std::ifstream is("Logs.txt");
+    while (std::getline(is, log_line) || line < target_height)
     {
-      std::string log_line;
-      getline(log_stream, log_line);            
       mvwprintw(target_window, line, 1, log_line.c_str());
       line++;
     }
@@ -1116,50 +1112,42 @@ void
 write_output (port fp, char *fmt, ...)
 {
   va_list args;
-//   // FILE *f;
-//   int restore_console_to_program = 0;
+  FILE *f;
+  int restore_console_to_program = 0;
 
   va_start (args, fmt);
-  ss_printf(&console_logs, fmt, args);
+//   f = fp.f;
 
-// //   f = fp.f;
+  f = fopen("Logs.txt", "w");
 
-//   // f = fopen("Logs.txt", "w");
-//   char* f;
+  if (console_state_saved)
+    {
+      restore_console_to_program = 1;
+      console_to_spim ();
+    }
 
-//   if (console_state_saved)
-//   {
-//     restore_console_to_program = 1;
-//     console_to_spim ();
-//   }
-
-//   // vsprintf (f, fmt, args); // lol fuck.
-
-//   console_logs >> fmt >> args;
-
-// //   if (f != 0)
-// //     {
-// // #ifdef NEED_VFPRINTF
-// //       _doprnt (fmt, args, f);
-// // #else
-// //       vsprintf (f, fmt, args);
-// // #endif
-// //       fflush (f);
-// //     }
-// //   else
-// //     {
-// // #ifdef NEED_VFPRINTF
-// //       _doprnt (fmt, args, stdout);
-// // #else
-// //       vsprintf (stdout, fmt, args);
-// // #endif
-// //       fflush (stdout);
-// //     }
+  if (f != 0)
+    {
+#ifdef NEED_VFPRINTF
+      _doprnt (fmt, args, f);
+#else
+      vfprintf (f, fmt, args);
+#endif
+      fflush (f);
+    }
+  else
+    {
+#ifdef NEED_VFPRINTF
+      _doprnt (fmt, args, stdout);
+#else
+      vfprintf (stdout, fmt, args);
+#endif
+      fflush (stdout);
+    }
   va_end (args);
 
-//   if (restore_console_to_program)
-//     console_to_program ();
-//   console_logs >> f;
+  if (restore_console_to_program)
+    console_to_program ();
 }
 
 
