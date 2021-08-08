@@ -265,15 +265,16 @@ int main(int argc, char **argv)
     // int i;
     // bool assembly_file_loaded = false;
     // int print_usage_msg = 0;
-    char* tcf = "/tmp/spimcurses_console_XXXXXX.log";
-    char* tmf = "/tmp/spimcurses__XXXXXX.log";
 
+    // Set up a _very_ cursed alternative to logging to stdout
+    char tcf[32] = "/tmp/spimcurses_console_XXXXXX";
     mkstemp(tcf);
-    mkstemp(tmf);
-
     tmp_console_file = tcf;
-    tmp_message_file = tmf;
     console_out.f = fopen(tmp_console_file.c_str(), "w+");
+
+    char tmf[32] = "/tmp/spimcurses_message_XXXXXX";
+    mkstemp(tmf);
+    tmp_message_file = tmf;
     message_out.f = fopen(tmp_message_file.c_str(), "w+");
 
     bare_machine = false;
