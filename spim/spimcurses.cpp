@@ -112,6 +112,7 @@ bool quiet;			/* => no warning messages */
 bool assemble;			/* => assemble, write to stdout and exit */
 char *exception_file_name = DEFAULT_EXCEPTION_HANDLER;
 port message_out, console_out, console_in;
+std::string tmp_console_file, tmp_message_file;
 bool mapped_io;			/* => activate memory-mapped IO */
 int pipe_out;
 int spim_return_value;		/* Value returned when spim exits */
@@ -139,10 +140,18 @@ std::string formatMemoryContents(mem_addr from, mem_addr to);
 std::string formatPartialQuadWord(mem_addr from, mem_addr to);
 std::string formatAsChars(mem_addr from, mem_addr to);
 std::string rightJustified(std::string input, int width, char padding);
+
+// TODO: Delete these, also create an object
 void show_data_memory(WINDOW* target_window, int start_line, int target_height);
 void show_user_stack(WINDOW* target_window, int start_line, int target_height);
 void show_registers(WINDOW* target_window, int start_line, int target_height);
-void show_log(WINDOW* target_window, int start_line, int target_height);
+
+// TODO: Roll this into the below function as well.
+void show_log(WINDOW* target_window, std::string path, int start_line, int target_height);
+
+// Should reduce code duplication
+void show_data(WINDOW* target_window, std::string data, int start_line, int target_height);
+
 
 // Format SPIM abstractions for display
 //
@@ -153,7 +162,7 @@ std::string formatSegLabel(std::string segName, mem_addr low, mem_addr high);
 std::string nnbsp(int n);
 
 /* Handy ncurses variables */
-int max_row, max_col;
+int max_row, max_col = 0;
 
 int dat_list = 0;
 int be_vert  = 0;
@@ -256,9 +265,16 @@ int main(int argc, char **argv)
     // int i;
     // bool assembly_file_loaded = false;
     // int print_usage_msg = 0;
+    char* tcf = "/tmp/spimcurses_console_XXXXXX.log";
+    char* tmf = "/tmp/spimcurses__XXXXXX.log";
 
-    console_out.f = stdout;
-    message_out.f = stdout;
+    mkstemp(tcf);
+    mkstemp(tmf);
+
+    tmp_console_file = tcf;
+    tmp_message_file = tmf;
+    console_out.f = fopen(tmp_console_file.c_str(), "w+");
+    message_out.f = fopen(tmp_message_file.c_str(), "w+");
 
     bare_machine = false;
     delayed_branches = false;
@@ -318,9 +334,9 @@ static void curses_loop() {
 
     // == INSTRUCTION PANE ==
     int inst_win_y = 1;
-    int inst_win_x = reg_win_width + reg_win_x + 1;
+    int inst_win_x = reg_win_width + reg_win_x;
     int inst_win_height = max_row * 0.8 - 2;
-    int inst_win_width = max_col/2 - inst_win_width; // I want to dedicate half of the remaining screen to the instruction window
+    int inst_win_width = max_col * 0.6; // I want to dedicate half of the remaining screen to the instruction window
     WINDOW* inst_win = create_newwin(inst_win_height, inst_win_width, inst_win_y, inst_win_x);
     scrollok(inst_win, TRUE);
     // scrollok(reg_win, TRUE);
@@ -334,7 +350,7 @@ static void curses_loop() {
 
     // == DATA PANE ==
     int data_win_y = 1;
-    int data_win_x = reg_win_width + reg_win_x + inst_win_width + 1;
+    int data_win_x = reg_win_width + reg_win_x + inst_win_width;
     int data_win_height = max_row * 0.66 - 2;
     int data_win_width = max_col - data_win_x - 1;
     WINDOW* data_win = create_newwin(data_win_height, data_win_width, data_win_y, data_win_x);
@@ -346,7 +362,7 @@ static void curses_loop() {
 
     // == STACK PANE ==
     int stack_win_y = max_row * 0.66 - 1;
-    int stack_win_x = reg_win_width + reg_win_x + inst_win_width + 1;
+    int stack_win_x = reg_win_width + reg_win_x + inst_win_width;
     int stack_win_height = max_row * 0.33;
     int stack_win_width = max_col - stack_win_x - 1;
     WINDOW* stack_win = create_newwin(stack_win_height, stack_win_width, stack_win_y, stack_win_x);
@@ -418,15 +434,22 @@ static void curses_loop() {
                     case REGISTERS:
                         reg_start_y--;
                         break;
+                    case INSTRUCTIONS:
+                        inst_start_y--;
+                        break;
                     case DATA:
                         dat_list_start--;
                         break;
                     case STACK:
                         stk_list_start--;
                         break;
-                    case INSTRUCTIONS:
-                        inst_start_y--;
+                    case OUTPUT:
+                        out_list_start--;
                         break;
+                    case LOG:
+                        log_list_start--;
+                        break;
+                    case INVALID:
                     default:
                         break;
                 }
@@ -437,15 +460,22 @@ static void curses_loop() {
                     case REGISTERS:
                         reg_start_y++;
                         break;
+                    case INSTRUCTIONS:
+                        inst_start_y++;
+                        break;
                     case DATA:
                         dat_list_start++;
                         break;
                     case STACK:
                         stk_list_start++;
                         break;
-                    case INSTRUCTIONS:
-                        inst_start_y++;
+                    case OUTPUT:
+                        out_list_start++;
                         break;
+                    case LOG:
+                        log_list_start++;
+                        break;
+                    case INVALID:
                     default:
                         break;
                 }
@@ -473,7 +503,16 @@ static void curses_loop() {
                         context = STACK;
                         break;
                     case STACK:
+                        context = OUTPUT;
+                        break;
+                    case OUTPUT:
+                        context = LOG;
+                        break;
+                    case LOG:
                         context = REGISTERS;
+                        break;
+                    case INVALID:
+                    default:
                         break;
                 }
                 break;
@@ -482,7 +521,7 @@ static void curses_loop() {
                 {
                     // Look away, kids!
                     case REGISTERS:
-                        context = STACK;
+                        context = LOG;
                         break;
                     case INSTRUCTIONS:
                         context = REGISTERS;
@@ -492,6 +531,15 @@ static void curses_loop() {
                         break;
                     case STACK:
                         context = DATA;
+                        break;
+                    case OUTPUT:
+                        context = STACK;
+                        break;
+                    case LOG:
+                        context = OUTPUT;
+                        break;
+                    case INVALID:
+                    default:
                         break;
                 }
                 break;
@@ -567,7 +615,7 @@ static void curses_loop() {
 
                         // To prevent SEGFAULTs while scrolling :)
                         int instruction_start = 0;
-                        if (inst_start_x > inst_dump.at(i).length())
+                        if (inst_start_x > (int) inst_dump.at(i).length())
                             instruction_start = inst_dump.at(i).length();
                         else
                             instruction_start = inst_start_x;
@@ -578,7 +626,8 @@ static void curses_loop() {
                     }
                 }
 
-                show_log(log_win, log_list_start, log_win_height);
+                show_log(log_win, tmp_message_file, log_list_start, log_win_height);
+                show_log(output_win, tmp_console_file, out_list_start, output_win_height);
                 
                 // Box and label the panes.
                 const char* label;
@@ -642,13 +691,16 @@ static void curses_loop() {
     delwin(stack_win);
     delwin(output_win);
     delwin(log_win);
-
     endwin();
+
+    // Clean up log files.
+    remove(tmp_console_file.c_str());
+    remove(tmp_message_file.c_str());
 }
 
-
 WINDOW* create_newwin(int height, int width, int starty, int startx)
-{	WINDOW *local_win;
+{
+    WINDOW *local_win;
 
 	local_win = newwin(height, width, starty, startx);
 	box(local_win, 0 , 0);		/* 0, 0 gives default characters 
@@ -711,6 +763,20 @@ void show_data_memory(WINDOW* target_window, int start_line, int target_height)
     }
 }
 
+void show_data(WINDOW* target_window, std::string data, int start_line, int target_height)
+{
+    int line = start_line;
+    std::istringstream iss(data);
+    while (!iss.eof() || line < target_height)
+    {
+        std::string current_line;
+        getline(iss, current_line);            
+        mvwprintw(target_window, line, 1, current_line.c_str());
+        wattroff(target_window, A_BOLD);
+        line++;
+    }
+}
+
 void show_user_stack(WINDOW* target_window, int start_line, int target_height)
 {
     int line = start_line;
@@ -742,12 +808,12 @@ void show_registers(WINDOW* target_window, int start_line, int target_height)
     }
 }
 
-void show_log(WINDOW* target_window, int start_line, int target_height)
+void show_log(WINDOW* target_window, std::string path, int start_line, int target_height)
 {
     int line = start_line;
     std::string log_line;
     // FILE* f = fopen("Logs.txt", "r");
-    std::ifstream is("Logs.txt");
+    std::ifstream is(path.c_str());
     while (std::getline(is, log_line) || line < target_height)
     {
       mvwprintw(target_window, line, 1, log_line.c_str());
@@ -1116,9 +1182,9 @@ write_output (port fp, char *fmt, ...)
   int restore_console_to_program = 0;
 
   va_start (args, fmt);
-//   f = fp.f;
+  f = fp.f;
 
-  f = fopen("Logs.txt", "w");
+//   f = fopen("Logs.txt", "w");
 
   if (console_state_saved)
     {
@@ -1133,6 +1199,7 @@ write_output (port fp, char *fmt, ...)
 #else
       vfprintf (f, fmt, args);
 #endif
+      fprintf(f, "\n");
       fflush (f);
     }
   else
