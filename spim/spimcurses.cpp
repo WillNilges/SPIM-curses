@@ -88,6 +88,9 @@
 #include "parser_yacc.h"
 #include "data.h"
 
+#include "curses/simpane.h"
+
+using namespace SpimCurses;
 
 /* Internal functions: */
 
@@ -324,18 +327,20 @@ static void curses_loop() {
     getmaxyx(stdscr, max_row, max_col);
     
     // == REGISTER PANE ==
-    int reg_win_y = 1;
-    int reg_win_x = 1;
-    int reg_win_height = max_row - 2;
-    int reg_win_width = 29;
-    WINDOW* reg_win = create_newwin(reg_win_height, reg_win_width, reg_win_y, reg_win_x);
+    // int reg_win_y = 1;
+    // int reg_win_x = 1;
+    // int reg_win_height = max_row - 2;
+    // int reg_win_width = 29;
+    // WINDOW* reg_win = create_newwin(reg_win_height, reg_win_width, reg_win_y, reg_win_x);
 
-    // int reg_start_x = 0;
-    int reg_start_y = 1;
+    // // int reg_start_x = 0;
+    // int reg_start_y = 1;
+
+    SpimCurses::SimPane reg_win("Registers", 1, 1, max_row - 2, 29);
 
     // == INSTRUCTION PANE ==
     int inst_win_y = 1;
-    int inst_win_x = reg_win_width + reg_win_x;
+    int inst_win_x = reg_win.get_dims().width + reg_win.get_dims().x;
     int inst_win_height = max_row * 0.8 - 2;
     int inst_win_width = max_col * 0.6; // I want to dedicate half of the remaining screen to the instruction window
     WINDOW* inst_win = create_newwin(inst_win_height, inst_win_width, inst_win_y, inst_win_x);
@@ -351,7 +356,7 @@ static void curses_loop() {
 
     // == DATA PANE ==
     int data_win_y = 1;
-    int data_win_x = reg_win_width + reg_win_x + inst_win_width;
+    int data_win_x = reg_win.get_dims().width + reg_win.get_dims().x + inst_win_width;
     int data_win_height = max_row * 0.66 - 2;
     int data_win_width = max_col - data_win_x - 1;
     WINDOW* data_win = create_newwin(data_win_height, data_win_width, data_win_y, data_win_x);
@@ -363,7 +368,7 @@ static void curses_loop() {
 
     // == STACK PANE ==
     int stack_win_y = max_row * 0.66 - 1;
-    int stack_win_x = reg_win_width + reg_win_x + inst_win_width;
+    int stack_win_x = reg_win.get_dims().width + reg_win.get_dims().x + inst_win_width;
     int stack_win_height = max_row * 0.33;
     int stack_win_width = max_col - stack_win_x - 1;
     WINDOW* stack_win = create_newwin(stack_win_height, stack_win_width, stack_win_y, stack_win_x);
@@ -407,7 +412,7 @@ static void curses_loop() {
 
         // Clearing by default is terrible and stupid and awful.
         // Shitty hack to "lessen" artifacting.
-        wclear(reg_win);
+        // wclear(reg_win);
         wclear(inst_win);
         wclear(data_win);
         wclear(stack_win);
@@ -433,7 +438,8 @@ static void curses_loop() {
                 switch (context)
                 {
                     case REGISTERS:
-                        reg_start_y--;
+                        // reg_start_y--;
+                        reg_win.act(SimPane::UP);
                         break;
                     case INSTRUCTIONS:
                         inst_start_y--;
@@ -459,7 +465,8 @@ static void curses_loop() {
                 switch (context)
                 {
                     case REGISTERS:
-                        reg_start_y++;
+                        // reg_start_y++;
+                        reg_win.act(SimPane::DOWN);
                         break;
                     case INSTRUCTIONS:
                         inst_start_y++;
@@ -567,7 +574,7 @@ static void curses_loop() {
                     write_output (message_out, "\n");
                     free (undefs);
                     
-                    delwin(reg_win);
+                    // delwin(reg_win);
                     delwin(inst_win);
                     
                     endwin();
@@ -580,7 +587,7 @@ static void curses_loop() {
                     {
                         // write_output (message_out, "Breakpoint encountered at 0x%08x\n", PC);
 
-                        delwin(reg_win);
+                        // delwin(reg_win);
                         delwin(inst_win);
                         
                         endwin();
@@ -589,7 +596,12 @@ static void curses_loop() {
                 }
                 
                 // Dump registers to the screen
-                show_registers(reg_win, reg_start_y, inst_win_height);
+                // show_registers(reg_win, reg_start_y, inst_win_height);
+                static str_stream ss;
+                int hex_flag = 1;
+                ss_clear (&ss);
+                format_registers(&ss, hex_flag, hex_flag);
+                reg_win.show_data(ss_to_string(&ss));
 
                 if (inst_cursor_position + 5 > inst_win_height - inst_start_y && ch == 'n')
                     inst_start_y -= 5;
@@ -634,11 +646,12 @@ static void curses_loop() {
                 const char* label;
 
                 //TODO?: void label_win(WINDOW* target_window, PaneContext context, char* base_label);
-                box(reg_win, 0 , 0);
-                wattron(reg_win, A_BOLD);
-                label = context == REGISTERS ? "[Registers]" : "Registers";
-                mvwprintw(reg_win, 0,1, label);
-                wattroff(reg_win, A_BOLD);
+                // box(reg_win, 0 , 0);
+                // wattron(reg_win, A_BOLD);
+                // label = context == REGISTERS ? "[Registers]" : "Registers";
+                // mvwprintw(reg_win, 0,1, label);
+                // wattroff(reg_win, A_BOLD);
+                reg_win.act(SimPane::BOX);
 
                 box(inst_win, 0, 0);
                 wattron(inst_win, A_BOLD);
@@ -651,32 +664,32 @@ static void curses_loop() {
                 label = context == DATA ? "[Data Memory]" : "Data Memory";
                 mvwprintw(data_win, 0,1, label);
                 wattroff(data_win, A_BOLD);
-                console_to_spim();
 
                 box(stack_win, 0, 0);
                 wattron(stack_win, A_BOLD);
                 label = context == STACK ? "[Stack Memory]" : "Stack Memory";
                 mvwprintw(stack_win, 0,1, label);
                 wattroff(stack_win, A_BOLD);
-                console_to_spim();
 
                 box(output_win, 0, 0);
                 wattron(output_win, A_BOLD);
                 label = context == OUTPUT ? "[Output]" : "Output";
                 mvwprintw(output_win, 0,1, label);
                 wattroff(output_win, A_BOLD);
-                console_to_spim();
 
                 box(log_win, 0, 0);
                 wattron(log_win, A_BOLD);
                 label = context == LOG ? "[Log]" : "Log";
                 mvwprintw(log_win, 0,1, label);
                 wattroff(log_win, A_BOLD);
+
+                
                 console_to_spim();
             }
         }
         
-        wrefresh(reg_win);
+        // wrefresh(reg_win);
+        reg_win.act(SimPane::REFRESH);
         wrefresh(inst_win);
         wrefresh(data_win);
         wrefresh(stack_win);
@@ -686,7 +699,7 @@ static void curses_loop() {
         mvprintw(max_row - 1, 2, "Press 'N' to advance / Use 'HJKL' to scroll / Press 'C' to switch windows / Press 'Q' to quit");
     }
 
-    delwin(reg_win);
+    // delwin(reg_win);
     delwin(inst_win);
     delwin(data_win);
     delwin(stack_win);
@@ -704,9 +717,9 @@ WINDOW* create_newwin(int height, int width, int starty, int startx)
     WINDOW *local_win;
 
 	local_win = newwin(height, width, starty, startx);
-	box(local_win, 0 , 0);		/* 0, 0 gives default characters 
-                                 * for the vertical and horizontal
-                                 * lines			*/
+	
+    // 0, 0 gives default characters for the vertical and horizontal lines
+    box(local_win, 0 , 0);
 	wrefresh(local_win);		/* Show that box 		*/
 
 	return local_win;
