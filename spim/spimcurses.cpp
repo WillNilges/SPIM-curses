@@ -141,10 +141,6 @@ std::string formatPartialQuadWord(mem_addr from, mem_addr to);
 std::string formatAsChars(mem_addr from, mem_addr to);
 std::string rightJustified(std::string input, int width, char padding);
 
-// TODO: Delete these, also create an object
-void show_data_memory(WINDOW* target_window, int start_line, int target_height);
-void show_user_stack(WINDOW* target_window, int start_line, int target_height);
-void show_registers(WINDOW* target_window, int start_line, int target_height);
 
 // TODO: Roll this into the below function as well.
 void show_log(WINDOW* target_window, std::string path, int start_line, int target_height);
@@ -407,11 +403,11 @@ static void curses_loop() {
 
         // Clearing by default is terrible and stupid and awful.
         // Shitty hack to "lessen" artifacting.
-        wclear(reg_win);
-        wclear(inst_win);
-        wclear(data_win);
-        wclear(stack_win);
-        wclear(log_win);
+        werase(reg_win);
+        werase(inst_win);
+        werase(data_win);
+        werase(stack_win);
+        werase(log_win);
 
         int step = 0;
         switch (ch) {
@@ -589,16 +585,22 @@ static void curses_loop() {
                 }
                 
                 // Dump registers to the screen
-                show_registers(reg_win, reg_start_y, inst_win_height);
+                static str_stream reg_ss;
+                int hex_flag = 1; // TODO: Toggle hex mode!
+                ss_clear (&reg_ss);
+                format_registers(&reg_ss, hex_flag, hex_flag);
+                show_data(reg_win, ss_to_string(&reg_ss), reg_start_y, inst_win_height);
 
                 if (inst_cursor_position + 5 > inst_win_height - inst_start_y && ch == 'n')
                     inst_start_y -= 5;
                 else if (inst_cursor_position < 0 && ch == 'n')
                     inst_start_y += 5;
 
-                show_data_memory(data_win, dat_list_start, data_win_height);
+                // Display data memory
+                show_data(data_win, displayDataSegments(), dat_list_start, inst_win_height);
 
-                show_user_stack(stack_win, stk_list_start, stack_win_height);
+                // Display user stack
+                show_data(stack_win, formatUserStack(), stk_list_start, stack_win_height);
                 
                 // Display instruction list
                 // TODO: Why are the lines glitching at the bottom? Is it linewrap?
@@ -712,6 +714,8 @@ WINDOW* create_newwin(int height, int width, int starty, int startx)
 	return local_win;
 }
 
+// For retrieving a nice list of instructions. TODO: See if you can just
+// use "show data?"
 std::vector<std::string> dump_instructions(mem_addr addr)
 {
     std::vector<std::string> instruction_list;
@@ -722,7 +726,8 @@ std::vector<std::string> dump_instructions(mem_addr addr)
     int fake_pc = 0;
 
     //   std::size_t found;
-    do {
+    do 
+    {
         exception_occurred = 0;
         inst = read_mem_inst (addr+fake_pc*4);
 
@@ -743,27 +748,6 @@ std::vector<std::string> dump_instructions(mem_addr addr)
     return instruction_list;
 }
 
-void show_data_memory(WINDOW* target_window, int start_line, int target_height)
-{
-    int line = start_line;
-    std::istringstream mem_map_stream(displayDataSegments());
-    while (!mem_map_stream.eof() || line < target_height)
-    {
-        std::string mem_line;
-        getline(mem_map_stream, mem_line);
-
-        // Bold the titles of each section of memory
-        if (mem_line.find("Kernel data segment") != std::string::npos ||
-            mem_line.find("User Stack")          != std::string::npos ||
-            mem_line.find("User data segment")   != std::string::npos)
-            wattron(target_window, A_BOLD);
-            
-        mvwprintw(target_window, line, 1, mem_line.c_str());
-        wattroff(target_window, A_BOLD);
-        line++;
-    }
-}
-
 void show_data(WINDOW* target_window, std::string data, int start_line, int target_height)
 {
     int line = start_line;
@@ -771,40 +755,16 @@ void show_data(WINDOW* target_window, std::string data, int start_line, int targ
     while (!iss.eof() || line < target_height)
     {
         std::string current_line;
-        getline(iss, current_line);            
+        getline(iss, current_line);
+
+        // Bold the titles of stuff we're looking for
+        std::string highlight[] = { "Kernel data segment", "User Stack", "User data segment" };
+        for (std::string str : highlight)
+            if (current_line.find(str) != std::string::npos)
+                wattron(target_window, A_BOLD);
+
         mvwprintw(target_window, line, 1, current_line.c_str());
         wattroff(target_window, A_BOLD);
-        line++;
-    }
-}
-
-void show_user_stack(WINDOW* target_window, int start_line, int target_height)
-{
-    int line = start_line;
-    std::istringstream stack_stream(formatUserStack());
-    while (!stack_stream.eof() || line < target_height)
-    {
-        std::string mem_line;
-        getline(stack_stream, mem_line);            
-        mvwprintw(target_window, line, 1, mem_line.c_str());
-        wattroff(target_window, A_BOLD);
-        line++;
-    }
-}
-
-void show_registers(WINDOW* target_window, int start_line, int target_height)
-{
-    int line = start_line;
-    static str_stream ss;
-    int hex_flag = 1;
-    ss_clear (&ss);
-    format_registers(&ss, hex_flag, hex_flag);
-    std::istringstream registers_stream(ss_to_string(&ss));
-    while (!registers_stream.eof() || line < target_height)
-    {
-        std::string mem_line;
-        getline(registers_stream, mem_line);            
-        mvwprintw(target_window, line, 1, mem_line.c_str());
         line++;
     }
 }
@@ -813,7 +773,6 @@ void show_log(WINDOW* target_window, std::string path, int start_line, int targe
 {
     int line = start_line;
     std::string log_line;
-    // FILE* f = fopen("Logs.txt", "r");
     std::ifstream is(path.c_str());
     while (std::getline(is, log_line) || line < target_height)
     {
