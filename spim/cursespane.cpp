@@ -1,9 +1,9 @@
-#include "cursespane.h" // The linter is a dirty lying whore.
+#include "cursespane.h" // The linter is lying
 
 using namespace SpimCurses;
 
-CursesPane::CursesPane(/*WINDOW* win, */std::string title, int win_height, int win_width, int win_y, int win_x)
-    : /*win(win),*/ title(title), win_height(win_height), win_width(win_width), win_y(win_y), win_x(win_x) 
+CursesPane::CursesPane(/*WINDOW* win, */PaneContext context, int win_height, int win_width, int win_y, int win_x)
+    : /*win(win),*/ pane_context(context), win_height(win_height), win_width(win_width), win_y(win_y), win_x(win_x) 
 {
     win = newwin(win_height, win_width, win_y, win_x);
 	
@@ -14,6 +14,31 @@ CursesPane::CursesPane(/*WINDOW* win, */std::string title, int win_height, int w
 
     start_x = 0;
     start_y = 0;
+
+    switch(context)
+    {
+        case REGISTERS:
+            title = "Registers";
+            break;
+        case INSTRUCTIONS:
+            title = "Instructions";
+            break;
+        case DATA:
+            title = "Data Memory";
+            break;
+        case STACK:
+            title = "Stack Memory";
+            break;
+        case OUTPUT:
+            title = "Output";
+            break;
+        case LOG: 
+            title = "Log";
+            break;
+        default:
+            title = "INVALID";
+            break;
+    }
 }
 
 void CursesPane::show_data(std::string data)
@@ -31,7 +56,7 @@ void CursesPane::show_data(std::string data)
             if (current_line.find(str) != std::string::npos)
                 wattron(win, A_BOLD);
 
-        mvwprintw(win, line, 1, current_line.c_str());
+        mvwprintw(win, line, 1, current_line.c_str()); // TODO: Displaying User/Kernel Data is wack. line+1? Damb.
         wattroff(win, A_BOLD);
         line++;
     }
@@ -50,13 +75,14 @@ void CursesPane::show_log(std::string path)
 }
 
 // Standard ncurses functions
-void CursesPane::draw_box()
+void CursesPane::draw_box(PaneContext context)
 {
     box(win, 0, 0);
     wattron(win, A_BOLD);
-//    label = context == LOG ? "[%s]" : "Log";
-//    mvwprintw(win, 0,1, label);
-    mvwprintw(win, 0,1, title.c_str()); // TODO: Change back to label 
+    std::string label;
+    label = context == pane_context ? "[" + title + "]" : title;
+    mvwprintw(win, 0,1, label.c_str());
+//    mvwprintw(win, 0,1, title.c_str()); // TODO: Change back to label 
     wattroff(win, A_BOLD);
 }
 

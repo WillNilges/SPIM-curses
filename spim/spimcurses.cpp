@@ -143,13 +143,6 @@ std::string formatPartialQuadWord(mem_addr from, mem_addr to);
 std::string formatAsChars(mem_addr from, mem_addr to);
 std::string rightJustified(std::string input, int width, char padding);
 
-
-// TODO: Roll this into the below function as well.
-void show_log(WINDOW* target_window, std::string path, int start_line, int target_height);
-
-// Function for vomiting a ton of data into a window™
-void show_data(WINDOW* target_window, std::string data, int start_line, int target_height);
-
 // Format SPIM abstractions for display
 //
 std::string formatAddress(mem_addr addr);
@@ -163,17 +156,6 @@ int max_row, max_col = 0;
 
 int dat_list = 0;
 int be_vert  = 0;
-
-// Enum to keep track of what pane the user is currently scrolling.
-typedef enum PaneContext {
-  REGISTERS,
-  INSTRUCTIONS,
-  DATA,
-  STACK,
-  OUTPUT,
-  LOG,
-  INVALID
-} PaneContext;
 
 PaneContext context = INSTRUCTIONS;
 
@@ -322,7 +304,7 @@ static void curses_loop() {
     getmaxyx(stdscr, max_row, max_col);
     
     // == REGISTER PANE ==
-    SpimCurses::CursesPane reg_pane("Registers", max_row - 2, 29, 1, 1);
+    SpimCurses::CursesPane reg_pane(REGISTERS, max_row - 2, 29, 1, 1);
 
     // == INSTRUCTION PANE ==
     // This is spooky because it's different so I'm gonna chill out and deal with it later.
@@ -332,7 +314,6 @@ static void curses_loop() {
     int inst_win_width = max_col * 0.6; // I want to dedicate half of the remaining screen to the instruction window
     WINDOW* inst_win = create_newwin(inst_win_height, inst_win_width, inst_win_y, inst_win_x);
     scrollok(inst_win, TRUE);
-    // scrollok(reg_win, TRUE);
 
     int inst_start_x = 0;
     int inst_start_y = 0;
@@ -342,57 +323,27 @@ static void curses_loop() {
     bool continuable;
 
     // == DATA PANE ==
-    //int data_win_y = 1;
-    //int data_win_x = reg_pane.getw() + reg_pane.getx() + inst_win_width;
-    //int data_win_height = max_row * 0.66 - 2;
-    //int data_win_width = max_col - data_win_x - 1;
-    //WINDOW* data_win = create_newwin(data_win_height, data_win_width, data_win_y, data_win_x, reg_pane.getw() + reg_pane.getx() + inst_win_width);
-    //scrollok(data_win, TRUE);
-
-    //int dat_list_start = 1;
-    // int reg_list_start = 1;
-    
     SpimCurses::CursesPane data_pane(
-        "Data",
+        DATA,
         max_row * 0.66 - 2,
-        max_col - data_pane.getx() - 1, 
+        max_col - inst_win_width - reg_pane.getw() - 2, 
         1, 
         reg_pane.getw() + reg_pane.getx() + inst_win_width
     );
 
     // == STACK PANE ==
-    //int stack_win_y = max_row * 0.66 - 1;
-    //int stack_win_x = reg_pane.getw() + reg_pane.getx() + inst_win_width;
-    //int stack_win_height = max_row * 0.33;
-    //int stack_win_width = max_col - stack_win_x - 1;
-    //WINDOW* stack_win = create_newwin(stack_win_height, stack_win_width, stack_win_y, stack_win_x);
-    //scrollok(stack_win, TRUE);
-
-    //int stk_list_start = 1;
-    // int reg_list_start = 1;
-    
     SpimCurses::CursesPane stack_pane(
-        "Stack",
+        STACK,
         max_row * 0.33,
-        max_col - stack_pane.getx() - 1,
+        max_col - data_pane.getx() - 1,
         max_row * 0.66 - 1,
         reg_pane.getw() + reg_pane.getx() + inst_win_width
     );
 
 
     // == OUTPUT PANE ==
-    //int output_win_y = max_row * 0.8 - 1;
-    //int output_win_x = inst_win_x;
-    //int output_win_height = max_row * 0.2;
-    //int output_win_width = inst_win_width / 2;
-    //WINDOW* output_win = create_newwin(output_win_height, output_win_width, output_win_y, output_win_x);
-    //scrollok(output_win, TRUE);
-
-    //int out_list_start = 1;
-    // int reg_list_start = 1;
-    
     SpimCurses::CursesPane output_pane(
-        "Output",
+        OUTPUT,
         max_row * 0.2,
         inst_win_width / 2,
         max_row * 0.8 - 1,
@@ -400,18 +351,8 @@ static void curses_loop() {
     );
 
     // == LOG PANE ==
-    //int log_win_y = max_row * 0.8 - 1;
-    //int log_win_x = output_win_x + output_win_width;
-    //int log_win_height = max_row * 0.2;
-    //int log_win_width = inst_win_width / 2;
-    //WINDOW* log_win = create_newwin(log_win_height, log_win_width, log_win_y, log_win_x);
-    //scrollok(log_win, TRUE);
-
-    //int log_list_start = 1;
-    // int reg_list_start = 1;
-    
-    SpimCurses::CursesPane log_pane(
-        "Log",
+   SpimCurses::CursesPane log_pane(
+        LOG,
         max_row * 0.2,
         inst_win_width / 2,
         max_row * 0.8 - 1,
@@ -429,13 +370,10 @@ static void curses_loop() {
 
         // Clearing by default is terrible and stupid and awful.
         // Shitty hack to "lessen" artifacting.
-        //werase(reg_win);
         reg_pane.erase();
         werase(inst_win);
-        // werase(data_win);
-//        werase(stack_win);
+        data_pane.erase();
         stack_pane.erase();
-        //werase(log_win);
         output_pane.erase();
         log_pane.erase();
         
@@ -514,7 +452,6 @@ static void curses_loop() {
                 if (context != DATA) {
                     inst_start_x++;
                 }
-                // wclear(inst_win);
                 break;
 
             // Switch between panes (both c and Shift-C)
@@ -595,7 +532,6 @@ static void curses_loop() {
                     write_output (message_out, "\n");
                     free (undefs);
                     
-                    //delwin(reg_win);
                     delwin(inst_win);
                     
                     endwin();
@@ -608,7 +544,6 @@ static void curses_loop() {
                     {
                         // write_output (message_out, "Breakpoint encountered at 0x%08x\n", PC);
 
-                        //delwin(reg_win);
                         delwin(inst_win);
                         
                         endwin();
@@ -621,7 +556,6 @@ static void curses_loop() {
                 int hex_flag = 1; // TODO: Toggle hex mode!
                 ss_clear (&reg_ss);
                 format_registers(&reg_ss, hex_flag, hex_flag);
-                //show_data(reg_win, ss_to_string(&reg_ss), reg_pane.getrow(), inst_win_height);
                 reg_pane.show_data(ss_to_string(&reg_ss));
 
                 if (inst_cursor_position + 5 > inst_win_height - inst_start_y && ch == 'n')
@@ -630,11 +564,9 @@ static void curses_loop() {
                     inst_start_y += 5;
 
                 // Display data memory
-                // show_data(data_win, displayDataSegments(), data_win.getrow(), inst_win_height);
                 data_pane.show_data(displayDataSegments());
 
                 // Display user stack
-                //show_data(stack_win, formatUserStack(), stk_list_start, stack_win_height);
                 stack_pane.show_data(formatUserStack());
                 
                 // Display instruction list
@@ -664,21 +596,13 @@ static void curses_loop() {
                     }
                 }
 
-                //show_log(log_win, tmp_message_file, log_list_start, log_win_height);
-                //show_log(output_win, tmp_console_file, out_list_start, output_win_height);
                 log_pane.show_log(tmp_message_file);
                 output_pane.show_log(tmp_console_file);
                 
                 // Box and label the panes.
                 const char* label;
-
-                //TODO?: void label_win(WINDOW* target_window, PaneContext context, char* base_label);
-                //box(reg_win, 0 , 0);
-                //wattron(reg_win, A_BOLD);
-                //label = context == REGISTERS ? "[Registers]" : "Registers";
-                //mvwprintw(reg_win, 0,1, label);
-                //wattroff(reg_win, A_BOLD);
-                reg_pane.draw_box();
+                
+                reg_pane.draw_box(context);
 
                 box(inst_win, 0, 0);
                 wattron(inst_win, A_BOLD);
@@ -686,48 +610,20 @@ static void curses_loop() {
                 mvwprintw(inst_win, 0,1, label);
                 wattroff(inst_win, A_BOLD);
 
-                //box(data_win, 0, 0);
-                //wattron(data_win, A_BOLD);
-                //label = context == DATA ? "[Data Memory]" : "Data Memory";
-                //mvwprintw(data_win, 0,1, label);
-                //wattroff(data_win, A_BOLD);
-                data_pane.draw_box();
-
-                //box(stack_win, 0, 0);
-                //wattron(stack_win, A_BOLD);
-                //label = context == STACK ? "[Stack Memory]" : "Stack Memory";
-                //mvwprintw(stack_win, 0,1, label);
-                //wattroff(stack_win, A_BOLD);
-                stack_pane.draw_box();
-
-                //box(output_win, 0, 0);
-                //wattron(output_win, A_BOLD);
-                //label = context == OUTPUT ? "[Output]" : "Output";
-                //mvwprintw(output_win, 0,1, label);
-                //wattroff(output_win, A_BOLD);
-                output_pane.draw_box();
-
-                //box(log_win, 0, 0);
-                //wattron(log_win, A_BOLD);
-                //label = context == LOG ? "[Log]" : "Log";
-                //mvwprintw(log_win, 0,1, label);
-                //wattroff(log_win, A_BOLD);
-                log_pane.draw_box();
+                data_pane.draw_box(context);
+                stack_pane.draw_box(context);
+                output_pane.draw_box(context);
+                log_pane.draw_box(context);
 
                 console_to_spim();
             }
         }
         
-        //wrefresh(reg_win);
         reg_pane.refresh();
         wrefresh(inst_win);
-        //wrefresh(data_win);
         data_pane.refresh();
-        //wrefresh(stack_win);
         stack_pane.refresh();
-        //wrefresh(output_win);
         output_pane.refresh();
-        //wrefresh(log_win);
         log_pane.refresh();
 
         mvprintw(max_row - 1, 2, "Press 'N' to advance / Use 'HJKL' to scroll / Press 'C' to switch windows / Press 'Q' to quit");
@@ -786,39 +682,6 @@ std::vector<std::string> dump_instructions(mem_addr addr)
     } while (str_inst.find("<none>") == std::string::npos);
 
     return instruction_list;
-}
-
-void show_data(WINDOW* target_window, std::string data, int start_line, int target_height)
-{
-    int line = start_line;
-    std::istringstream iss(data);
-    while (!iss.eof() || line < target_height)
-    {
-        std::string current_line;
-        getline(iss, current_line);
-
-        // Bold the titles of stuff we're looking for
-        std::string highlight[] = { "Kernel data segment", "User Stack", "User data segment" };
-        for (std::string str : highlight)
-            if (current_line.find(str) != std::string::npos)
-                wattron(target_window, A_BOLD);
-
-        mvwprintw(target_window, line, 1, current_line.c_str());
-        wattroff(target_window, A_BOLD);
-        line++;
-    }
-}
-
-void show_log(WINDOW* target_window, std::string path, int start_line, int target_height)
-{
-    int line = start_line;
-    std::string log_line;
-    std::ifstream is(path.c_str());
-    while (std::getline(is, log_line) || line < target_height)
-    {
-      mvwprintw(target_window, line, 1, log_line.c_str());
-      line++;
-    }
 }
 
 //
